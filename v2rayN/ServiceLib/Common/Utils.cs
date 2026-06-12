@@ -984,9 +984,9 @@ public class Utils
 
     public static string StartupPath()
     {
-        if (Environment.GetEnvironmentVariable(Global.LocalAppData) == "1")
+        if (NetAccelIdentity.IsNetAccel || Environment.GetEnvironmentVariable(Global.LocalAppData) == "1")
         {
-            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "v2rayN");
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), NetAccelIdentity.Active.UserDataDirectoryName);
         }
 
         return GetBaseDirectory();

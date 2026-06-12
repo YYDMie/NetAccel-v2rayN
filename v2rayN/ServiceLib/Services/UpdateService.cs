@@ -9,6 +9,13 @@ public class UpdateService(Config config, Func<bool, string, Task> updateFunc)
 
     public async Task CheckUpdateGuiN(bool preRelease)
     {
+        // NetAccel: upstream v2rayN GUI application-update is blocked
+        if (NetAccelIdentity.Active.DisableUpstreamAppUpdate)
+        {
+            await UpdateFunc(false, "NetAccel: upstream application update is disabled");
+            return;
+        }
+
         var url = string.Empty;
         var fileName = string.Empty;
 
@@ -117,6 +124,13 @@ public class UpdateService(Config config, Func<bool, string, Task> updateFunc)
         var msgs = new List<string>();
         foreach (var type in CoreInfoManager.Instance.GetCheckUpdateCoreTypes())
         {
+            // NetAccel: skip upstream v2rayN GUI version query in background auto-check
+            // to avoid leaking version info and confusing the user with blocked-update notifications.
+            if (type == ECoreType.v2rayN && NetAccelIdentity.Active.DisableUpstreamAppUpdate)
+            {
+                continue;
+            }
+
             if (!(_config.CheckUpdateItem.SelectedCoreTypes?.Contains(type.ToString()) ?? true))
             {
                 continue;

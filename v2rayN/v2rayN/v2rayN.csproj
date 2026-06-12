@@ -11,6 +11,12 @@
 		<SupportedOSPlatformVersion>7.0</SupportedOSPlatformVersion>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<CETCompat>false</CETCompat>
+		<!-- NetAccel product identity: publish output is NetAccel.exe -->
+		<AssemblyName>NetAccel</AssemblyName>
+		<RootNamespace>v2rayN</RootNamespace>
+		<Product>NetAccel</Product>
+		<AssemblyTitle>NetAccel</AssemblyTitle>
+		<Description>NetAccel - Network Acceleration Client</Description>
 	</PropertyGroup>
 
 	<ItemGroup>

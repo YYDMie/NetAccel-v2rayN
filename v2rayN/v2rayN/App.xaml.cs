@@ -20,16 +20,23 @@ public partial class App : Application
     /// <param name="e"></param>
     protected override void OnStartup(StartupEventArgs e)
     {
-        var exePathKey = Utils.GetMd5(Utils.GetExePath());
+        // ── NetAccel identity: configure before anything else ──────
+        NetAccelIdentity.Configure(NetAccelIdentity.CreateNetAccel());
+
+        // Use the fixed single-instance name (not an exe-path hash)
+        var instanceName = NetAccelIdentity.Active.SingleInstanceName;
 
         var rebootas = e.Args.Any(t => t == Global.RebootAs);
-        ProgramStarted = new EventWaitHandle(false, EventResetMode.AutoReset, exePathKey, out var bCreatedNew);
+        ProgramStarted = new EventWaitHandle(false, EventResetMode.AutoReset, instanceName, out var bCreatedNew);
         if (!rebootas && !bCreatedNew)
         {
             ProgramStarted.Set();
             Environment.Exit(0);
             return;
         }
+
+        // Set Windows AppUserModelID before main window / tray is created
+        SetAppUserModelId(NetAccelIdentity.Active.AppUserModelID);
 
         if (!AppManager.Instance.InitApp())
         {
@@ -71,5 +78,26 @@ public partial class App : Application
         Logging.SaveLog("OnExit");
         base.OnExit(e);
         Process.GetCurrentProcess().Kill();
+    }
+
+    /// <summary>
+    /// Sets the Windows explicit AppUserModelID for the current process.
+    /// This must be called before the main window or tray icon is created.
+    /// </summary>
+    [SupportedOSPlatform("windows")]
+    private static void SetAppUserModelId(string appUserModelId)
+    {
+        if (!Utils.IsWindows() || string.IsNullOrEmpty(appUserModelId))
+        {
+            return;
+        }
+        try
+        {
+            WindowsIdentityHelper.SetCurrentProcessExplicitAppUserModelID(appUserModelId);
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog("SetAppUserModelId failed", ex);
+        }
     }
 }

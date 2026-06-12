@@ -9,6 +9,7 @@ global using System.Linq;
 global using System.Reactive.Disposables.Fluent;
 global using System.Reactive.Linq;
 global using System.Runtime.InteropServices;
+global using System.Runtime.Versioning;
 global using System.Text;
 global using System.Threading;
 global using System.Threading.Tasks;

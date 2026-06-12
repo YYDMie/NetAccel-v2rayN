@@ -121,7 +121,10 @@ public static class AutoStartupHandler
 
     private static string GetAutoRunNameWindows()
     {
-        return $"{Global.AutoRunName}_{Utils.GetMd5(Utils.StartupPath())}";
+        var baseName = NetAccelIdentity.IsNetAccel
+            ? NetAccelIdentity.Active.AutoRunBaseName
+            : Global.AutoRunName;
+        return $"{baseName}_{Utils.GetMd5(Utils.StartupPath())}";
     }
 
     #endregion Windows

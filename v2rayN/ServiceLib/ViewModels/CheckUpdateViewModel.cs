@@ -55,6 +55,18 @@ public class CheckUpdateViewModel : MyReactiveObject
 
     private CheckUpdateModel GetCheckUpdateModel(ECoreType coreType)
     {
+        // NetAccel: upstream v2rayN GUI application-update is disabled
+        if (coreType == _v2rayN && NetAccelIdentity.Active.DisableUpstreamAppUpdate)
+        {
+            return new()
+            {
+                IsSelected = false,
+                CoreType = coreType,
+                IsGeoFile = false,
+                Remarks = ResUI.menuCheckUpdate + $" (NetAccel: upstream update disabled)",
+            };
+        }
+
         if (coreType == _v2rayN && Utils.IsPackagedInstall())
         {
             return new()
@@ -137,6 +149,13 @@ public class CheckUpdateViewModel : MyReactiveObject
                 continue;
             }
 
+            // NetAccel: block upstream v2rayN GUI application check
+            if (item.CoreType == _v2rayN && NetAccelIdentity.Active.DisableUpstreamAppUpdate)
+            {
+                await UpdateView(item.CoreType, "NetAccel: application updates are managed separately");
+                continue;
+            }
+
             if (item.CoreType == null)
             {
                 await UpdateView(item.CoreType, ResUI.MsgNotSupport);
@@ -185,6 +204,12 @@ public class CheckUpdateViewModel : MyReactiveObject
             }
             else if (item.CoreType == _v2rayN)
             {
+                // NetAccel: block upstream v2rayN GUI application update
+                if (NetAccelIdentity.Active.DisableUpstreamAppUpdate)
+                {
+                    await UpdateView(_v2rayN, "NetAccel: application updates are managed separately");
+                    continue;
+                }
                 if (Utils.IsPackagedInstall())
                 {
                     await UpdateView(_v2rayN, ResUI.MsgNotSupport);
