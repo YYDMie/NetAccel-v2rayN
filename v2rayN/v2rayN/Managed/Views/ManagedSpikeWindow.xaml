@@ -1,0 +1,75 @@
+<Window
+    x:Class="v2rayN.Managed.Views.ManagedSpikeWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Title="Managed Spike (WP-03)"
+    Width="600"
+    Height="500"
+    d:DesignHeight="500"
+    d:DesignWidth="600"
+    mc:Ignorable="d">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Login -->
+        <GroupBox Grid.Row="0" Header="Login">
+            <StackPanel Margin="8">
+                <TextBox x:Name="txtUsername" Margin="0,4" Text="username" />
+                <PasswordBox x:Name="txtPassword" Margin="0,4" />
+                <Button x:Name="btnLogin" Margin="0,4" Content="Login" />
+                <TextBlock x:Name="tbLoginStatus" Margin="0,4" Text="{Binding LoginStatus}" />
+            </StackPanel>
+        </GroupBox>
+
+        <!-- Instance / Register -->
+        <GroupBox Grid.Row="1" Header="Instance">
+            <StackPanel Margin="8">
+                <Button x:Name="btnRegister" Margin="0,4" Content="Register / Recover Instance" />
+                <TextBlock x:Name="tbInstanceStatus" Margin="0,4" Text="{Binding InstanceStatus}" />
+            </StackPanel>
+        </GroupBox>
+
+        <!-- Policy / Status -->
+        <GroupBox Grid.Row="2" Header="Policy / Status">
+            <StackPanel Margin="8">
+                <Button x:Name="btnRefreshStatus" Margin="0,4" Content="Refresh Status" />
+                <TextBlock x:Name="tbPolicySummary" Margin="0,4" Text="{Binding PolicySummary}" TextWrapping="Wrap" />
+            </StackPanel>
+        </GroupBox>
+
+        <!-- Selection -->
+        <GroupBox Grid.Row="3" Header="Selection">
+            <StackPanel Margin="8">
+                <TextBox x:Name="txtSelectionMode" Margin="0,4" Text="automatic" />
+                <TextBox x:Name="txtProfileId" Margin="0,4" Text="" />
+                <Button x:Name="btnUpdateSelection" Margin="0,4" Content="Update Selection" />
+                <TextBlock x:Name="tbSelectionSummary" Margin="0,4" Text="{Binding SelectionSummary}" />
+            </StackPanel>
+        </GroupBox>
+
+        <!-- Config Sync -->
+        <GroupBox Grid.Row="4" Header="Config Sync">
+            <StackPanel Margin="8">
+                <Button x:Name="btnAckConfig" Margin="0,4" Content="Acknowledge Config" />
+                <TextBlock x:Name="tbConfigSyncStatus" Margin="0,4" Text="{Binding ConfigSyncStatus}" />
+            </StackPanel>
+        </GroupBox>
+
+        <TextBlock
+            Grid.Row="5"
+            Margin="0,8"
+            Foreground="Gray"
+            Text="Spike only — no real API calls, no secrets stored in ViewModel properties."
+            TextWrapping="Wrap" />
+    </Grid>
+</Window>
