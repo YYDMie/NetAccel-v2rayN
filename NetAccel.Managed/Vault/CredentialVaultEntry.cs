@@ -10,6 +10,9 @@ public enum CredentialVaultEntry
     InstanceCredential,
     InstanceMetadata,
     InstallationKey,
+    DevicePrivateKey,
+    DeviceKeyId,
+    AccountId,
 }
 
 /// <summary>

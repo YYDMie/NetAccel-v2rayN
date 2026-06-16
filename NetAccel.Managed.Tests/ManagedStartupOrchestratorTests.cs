@@ -1,8 +1,11 @@
 using System.Net;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using NetAccel.Managed.Api;
 using NetAccel.Managed.Auth;
+using NetAccel.Managed.Cache;
+using NetAccel.Managed.Crypto;
 using NetAccel.Managed.Dto;
 using NetAccel.Managed.Identity;
 using NetAccel.Managed.Instance;
@@ -15,43 +18,124 @@ namespace NetAccel.Managed.Tests;
 
 public class ManagedStartupOrchestratorTests
 {
-    private static (ManagedStartupOrchestrator Orchestrator, InMemoryCredentialVault Vault, HttpClient Http) CreateOrchestrator(
-        Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>>? handler = null)
+    private static (ManagedStartupOrchestrator Orchestrator, InMemoryCredentialVault Vault, HttpClient Http, string CacheDir, string ServerPublicKey, string ServerPrivateKey) CreateOrchestrator(
+        Func<InMemoryCredentialVault, string, string, Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>>>? handlerFactory = null)
     {
-        var h = handler ?? ((req, ct) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        var vault = new InMemoryCredentialVault();
+        var cacheDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        var envelopeCache = new EnvelopeCacheManager(cacheDir);
+        var offlineRules = new OfflineConfigRules();
+
+        using var serverEcdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var serverPublicKey = serverEcdsa.ExportSubjectPublicKeyInfoPem();
+        var serverPrivateKey = serverEcdsa.ExportPkcs8PrivateKeyPem();
+
+        Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> defaultHandler = (req, ct) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent("{\"code\":200,\"message\":\"ok\",\"error_code\":\"\",\"data\":{}}", Encoding.UTF8, "application/json"),
-        }));
-        var http = new HttpClient(new FakeHandler(h));
+        });
+
+        Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> innerHandler = handlerFactory?.Invoke(vault, serverPublicKey, serverPrivateKey) ?? defaultHandler;
+        var http = new HttpClient(new FakeHandler(innerHandler));
         var api = new ManagedApiClient("https://api.example.com", http);
-        var vault = new InMemoryCredentialVault();
         var auth = new AuthService(api, vault);
         var installation = new InstallationIdentityService(vault);
         var instance = new InstanceService(api, vault, auth);
         var selection = new ManagedSelectionService(api, vault, auth);
         var configService = new ManagedConfigService(api, vault, auth);
-        var orch = new ManagedStartupOrchestrator(auth, installation, instance, selection, configService, api, vault, "1.0.0", new(), new());
-        return (orch, vault, http);
+        var deviceKeyManager = new DeviceKeyManager(vault);
+
+        var serverKeyProvider = new StaticServerKeyProvider(serverPublicKey);
+
+        var orch = new ManagedStartupOrchestrator(
+            auth, installation, instance, selection, configService,
+            deviceKeyManager, envelopeCache, offlineRules, serverKeyProvider,
+            api, vault, "1.0.0", new(), new());
+
+        return (orch, vault, http, cacheDir, serverPublicKey, serverPrivateKey);
+    }
+
+    private static ManagedEnvelopeV1 MakeV1Envelope(
+        string payloadJson,
+        string devicePublicKey,
+        string serverPrivateKey,
+        InMemoryCredentialVault? vault = null,
+        string serverKeyId = "server-key-1",
+        int accountId = 1,
+        string instanceId = "i1",
+        string? keyId = null,
+        int assignmentRevision = 7,
+        int selectionRevision = 2,
+        DateTimeOffset? issuedAt = null,
+        DateTimeOffset? expiresAt = null)
+    {
+        var actualKeyId = keyId ?? vault?.RetrieveAsync(CredentialVaultEntry.DeviceKeyId).Result ?? "device-key-1";
+        return ManagedEnvelopeV1Crypto.EncryptForTest(
+            payloadJson, devicePublicKey, serverPrivateKey, serverKeyId,
+            accountId, instanceId, actualKeyId, assignmentRevision, selectionRevision,
+            issuedAt, expiresAt);
+    }
+
+    private static string MakePayloadJson(ManagedConfigPayload payload)
+        => JsonSerializer.Serialize(payload);
+
+    private static ManagedConfigPayload CreateValidPayload(int assignmentRevision = 7, int selectionRevision = 2)
+    {
+        return new ManagedConfigPayload
+        {
+            PayloadSchema = "managed-config/v1",
+            AssignmentRevision = assignmentRevision,
+            SelectionRevision = selectionRevision,
+            RecommendedProfileId = "plan-1",
+            FallbackProfileIds = [],
+            Profiles =
+            [
+                new ManagedProfile
+                {
+                    Id = "plan-1",
+                    DisplayName = "Test",
+                    Available = true,
+                    Protocol = "vless",
+                    CorePreference = "xray",
+                    Endpoint = new EndpointInfo { Host = "test.example.com", Port = 443 },
+                    Transport = new TransportInfo { Network = "raw" },
+                    VlessCredentials = new VlessCredentials { Uuid = "00000000-0000-0000-0000-000000000001" },
+                    VlessRealitySecurity = new VlessRealitySecurity
+                    {
+                        Type = "reality",
+                        ServerName = "test.example.com",
+                        PublicKey = "test-pub-key",
+                        ShortId = "01",
+                        Fingerprint = "chrome",
+                    },
+                    Policy = new ProfilePolicy { AllowSystemProxy = true, AllowTun = true, AllowLocalProxy = false },
+                },
+            ],
+            RoutingPolicy = new ManagedRoutingPolicy { Mode = "managed_default" },
+            DnsPolicy = new ManagedDnsPolicy { NormalDns = "https://cloudflare-dns.com/dns-query", TunDns = "https://cloudflare-dns.com/dns-query" },
+            ClientPolicy = new ClientPolicy { AllowClassicMode = false, AllowTun = true, AllowLocalProxy = false, AllowManualSelection = true, AllowAutomaticFailover = true, OfflineGraceSeconds = 3600 },
+        };
     }
 
     [Fact]
     public async Task Startup_NoCredentials_ReturnsNeedsLogin()
     {
-        var (orch, _, http) = CreateOrchestrator();
+        var (orch, _, http, cacheDir, _, _) = CreateOrchestrator();
         var result = await orch.StartupAsync();
         Assert.Equal(ManagedStartupState.NeedsLogin, result.State);
         http.Dispose();
+        Directory.Delete(cacheDir, true);
     }
 
     [Fact]
     public async Task Startup_RefreshSuccess_InstanceSuccess_ReturnsReady()
     {
-        var (orch, vault, http) = CreateOrchestrator((req, ct) =>
+        var (orch, vault, http, cacheDir, _, _) = CreateOrchestrator((vault, serverPublicKey, serverPrivateKey) => (req, ct) =>
         {
             var path = req.RequestUri?.AbsolutePath ?? "";
             if (path == "/api/v1/client/refresh")
             {
-                var data = new RefreshResponse { AccessToken = "at2", RefreshToken = "rt2" };
+                var data = new RefreshResponse { AccessToken = "at2", RefreshToken = "rt2", AccountId = 1 };
                 var envelope = new ManagedApiResponse<RefreshResponse> { Code = 200, Message = "ok", ErrorCode = "", Data = data };
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
@@ -115,16 +199,18 @@ public class ManagedStartupOrchestratorTests
         });
         await vault.StoreAsync(CredentialVaultEntry.RefreshToken, "rt");
         await vault.StoreAsync(CredentialVaultEntry.AccessToken, "at");
+        await vault.StoreAsync(CredentialVaultEntry.AccountId, "1");
 
         var result = await orch.StartupAsync();
         Assert.Equal(ManagedStartupState.Ready, result.State);
         http.Dispose();
+        Directory.Delete(cacheDir, true);
     }
 
     [Fact]
     public async Task Startup_RefreshAccountDisabled_ReturnsAccountDisabled()
     {
-        var (orch, vault, http) = CreateOrchestrator((req, ct) =>
+        var (orch, vault, http, cacheDir, _, _) = CreateOrchestrator((vault, serverPublicKey, serverPrivateKey) => (req, ct) =>
         {
             var envelope = new ManagedApiResponse { Code = 403, Message = "disabled", ErrorCode = ManagedErrorCode.ClientAccountInactive };
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden)
@@ -137,17 +223,18 @@ public class ManagedStartupOrchestratorTests
         var result = await orch.StartupAsync();
         Assert.Equal(ManagedStartupState.AccountDisabled, result.State);
         http.Dispose();
+        Directory.Delete(cacheDir, true);
     }
 
     [Fact]
     public async Task Startup_InstanceRevoked_ReturnsInstanceRevoked()
     {
-        var (orch, vault, http) = CreateOrchestrator((req, ct) =>
+        var (orch, vault, http, cacheDir, _, _) = CreateOrchestrator((vault, serverPublicKey, serverPrivateKey) => (req, ct) =>
         {
             var path = req.RequestUri?.AbsolutePath ?? "";
             if (path == "/api/v1/client/refresh")
             {
-                var data = new RefreshResponse { AccessToken = "at2", RefreshToken = "rt2" };
+                var data = new RefreshResponse { AccessToken = "at2", RefreshToken = "rt2", AccountId = 1 };
                 var envelope = new ManagedApiResponse<RefreshResponse> { Code = 200, Message = "ok", ErrorCode = "", Data = data };
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
@@ -169,17 +256,18 @@ public class ManagedStartupOrchestratorTests
         var result = await orch.StartupAsync();
         Assert.Equal(ManagedStartupState.InstanceRevoked, result.State);
         http.Dispose();
+        Directory.Delete(cacheDir, true);
     }
 
     [Fact]
     public async Task Startup_NoAssignment_ReturnsNoAssignment()
     {
-        var (orch, vault, http) = CreateOrchestrator((req, ct) =>
+        var (orch, vault, http, cacheDir, _, _) = CreateOrchestrator((vault, serverPublicKey, serverPrivateKey) => (req, ct) =>
         {
             var path = req.RequestUri?.AbsolutePath ?? "";
             if (path == "/api/v1/client/refresh")
             {
-                var data = new RefreshResponse { AccessToken = "at2", RefreshToken = "rt2" };
+                var data = new RefreshResponse { AccessToken = "at2", RefreshToken = "rt2", AccountId = 1 };
                 var envelope = new ManagedApiResponse<RefreshResponse> { Code = 200, Message = "ok", ErrorCode = "", Data = data };
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
@@ -236,6 +324,15 @@ public class ManagedStartupOrchestratorTests
                     Content = new StringContent(JsonSerializer.Serialize(envelope), Encoding.UTF8, "application/json"),
                 });
             }
+            if (path == "/api/v1/client/managed/keys")
+            {
+                var data = new DeviceKeyRegisterResponse { Id = "dk1", KeyId = "device-key-1", InstanceId = "i1", CreatedAt = "2026-06-12T14:00:00Z" };
+                var envelope = new ManagedApiResponse<DeviceKeyRegisterResponse> { Code = 200, Message = "ok", ErrorCode = "", Data = data };
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(JsonSerializer.Serialize(envelope), Encoding.UTF8, "application/json"),
+                });
+            }
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
         });
         await vault.StoreAsync(CredentialVaultEntry.RefreshToken, "rt");
@@ -243,33 +340,20 @@ public class ManagedStartupOrchestratorTests
         var result = await orch.StartupAsync();
         Assert.Equal(ManagedStartupState.NoAssignment, result.State);
         http.Dispose();
+        Directory.Delete(cacheDir, true);
     }
 
     [Fact]
-    public async Task Startup_ConfigFetch_WrappedEnvelope_ReturnsDecryptedPayload()
+    public async Task Startup_ConfigFetch_V1Envelope_ReturnsDecryptedPayload()
     {
-        var accessToken = "at_test";
-        var payload = new ManagedConfigPayload
-        {
-            PayloadSchema = "managed-config/v1",
-            AssignmentRevision = 7,
-            SelectionRevision = 2,
-            RecommendedProfileId = "plan-1",
-            FallbackProfileIds = [],
-            Profiles = [],
-            RoutingPolicy = new { },
-            DnsPolicy = new { },
-            ClientPolicy = new ClientPolicy { AllowClassicMode = false, AllowTun = true, AllowLocalProxy = false, AllowManualSelection = true, AllowAutomaticFailover = true, OfflineGraceSeconds = 3600 },
-        };
-        var (nonce, ciphertext) = NetAccel.Managed.Crypto.SpikeV0EnvelopeCrypto.EncryptForTest(
-            JsonSerializer.Serialize(payload), accessToken);
+        var payload = CreateValidPayload();
 
-        var (orch, vault, http) = CreateOrchestrator((req, ct) =>
+        var (orch, vault, http, cacheDir, serverPublicKey, serverPrivateKey) = CreateOrchestrator((vault, serverPublicKey, serverPrivateKey) => (req, ct) =>
         {
             var path = req.RequestUri?.AbsolutePath ?? "";
             if (path == "/api/v1/client/refresh")
             {
-                var data = new RefreshResponse { AccessToken = accessToken, RefreshToken = "rt2" };
+                var data = new RefreshResponse { AccessToken = "at2", RefreshToken = "rt2", AccountId = 1 };
                 var envelope = new ManagedApiResponse<RefreshResponse> { Code = 200, Message = "ok", ErrorCode = "", Data = data };
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
@@ -326,23 +410,27 @@ public class ManagedStartupOrchestratorTests
                     Content = new StringContent(JsonSerializer.Serialize(envelope), Encoding.UTF8, "application/json"),
                 });
             }
-            if (path == "/api/v1/client/managed/config")
+            if (path == "/api/v1/client/managed/keys")
             {
-                var spikeEnvelope = new ManagedEnvelopeSpikeV0
+                var data = new DeviceKeyRegisterResponse { Id = "dk1", KeyId = "device-key-1", InstanceId = "i1", CreatedAt = "2026-06-12T14:00:00Z" };
+                var envelope = new ManagedApiResponse<DeviceKeyRegisterResponse> { Code = 200, Message = "ok", ErrorCode = "", Data = data };
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
-                    Schema = "managed-envelope/spike-v0",
-                    PayloadSchema = "managed-config/v1",
-                    AssignmentRevision = 7,
-                    SelectionRevision = 2,
-                    AccountId = 1,
-                    InstanceId = "i1",
-                    IssuedAt = "2026-06-12T14:00:00Z",
-                    ExpiresAt = "2026-06-12T14:15:00Z",
-                    Algorithm = "access-token-sha256-aes256gcm",
-                    Nonce = nonce,
-                    Ciphertext = ciphertext,
-                };
-                var envelope = new ManagedApiResponse<ManagedEnvelopeSpikeV0> { Code = 200, Message = "ok", ErrorCode = "", Data = spikeEnvelope };
+                    Content = new StringContent(JsonSerializer.Serialize(envelope), Encoding.UTF8, "application/json"),
+                });
+            }
+            if (path == "/api/v1/client/managed/envelope")
+            {
+                var deviceKey = vault.RetrieveAsync(CredentialVaultEntry.DevicePrivateKey).Result;
+                using var deviceEcdh = ECDiffieHellman.Create();
+                deviceEcdh.ImportFromPem(deviceKey!);
+                var devicePublicKey = deviceEcdh.ExportSubjectPublicKeyInfoPem();
+
+                var v1Envelope = MakeV1Envelope(
+                    MakePayloadJson(payload), devicePublicKey, serverPrivateKey,
+                    vault, accountId: 1, instanceId: "i1");
+
+                var envelope = new ManagedApiResponse<ManagedEnvelopeV1> { Code = 200, Message = "ok", ErrorCode = "", Data = v1Envelope };
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new StringContent(JsonSerializer.Serialize(envelope), Encoding.UTF8, "application/json"),
@@ -354,7 +442,8 @@ public class ManagedStartupOrchestratorTests
             });
         });
         await vault.StoreAsync(CredentialVaultEntry.RefreshToken, "rt");
-        await vault.StoreAsync(CredentialVaultEntry.AccessToken, accessToken);
+        await vault.StoreAsync(CredentialVaultEntry.AccessToken, "at");
+        await vault.StoreAsync(CredentialVaultEntry.AccountId, "1");
 
         var result = await orch.StartupAsync();
         Assert.Equal(ManagedStartupState.Ready, result.State);
@@ -364,18 +453,19 @@ public class ManagedStartupOrchestratorTests
         Assert.Equal(7, config.AssignmentRevision);
         Assert.Equal("managed-config/v1", config.PayloadSchema);
         http.Dispose();
+        Directory.Delete(cacheDir, true);
     }
 
     [Fact]
     public async Task Startup_ConfigFetch_FirstFetch_OmitsIfNoneMatch()
     {
         HttpRequestMessage? captured = null;
-        var (orch, vault, http) = CreateOrchestrator((req, ct) =>
+        var (orch, vault, http, cacheDir, serverPublicKey, serverPrivateKey) = CreateOrchestrator((vault, serverPublicKey, serverPrivateKey) => (req, ct) =>
         {
             var path = req.RequestUri?.AbsolutePath ?? "";
             if (path == "/api/v1/client/refresh")
             {
-                var data = new RefreshResponse { AccessToken = "at2", RefreshToken = "rt2" };
+                var data = new RefreshResponse { AccessToken = "at2", RefreshToken = "rt2", AccountId = 1 };
                 var envelope = new ManagedApiResponse<RefreshResponse> { Code = 200, Message = "ok", ErrorCode = "", Data = data };
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
@@ -432,7 +522,7 @@ public class ManagedStartupOrchestratorTests
                     Content = new StringContent(JsonSerializer.Serialize(envelope), Encoding.UTF8, "application/json"),
                 });
             }
-            if (path == "/api/v1/client/managed/config")
+            if (path == "/api/v1/client/managed/envelope")
             {
                 captured = req;
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotModified));
@@ -444,39 +534,27 @@ public class ManagedStartupOrchestratorTests
         });
         await vault.StoreAsync(CredentialVaultEntry.RefreshToken, "rt");
         await vault.StoreAsync(CredentialVaultEntry.AccessToken, "at");
+        await vault.StoreAsync(CredentialVaultEntry.AccountId, "1");
 
         await orch.StartupAsync();
         Assert.NotNull(captured);
         Assert.Empty(captured.Headers.IfNoneMatch);
         http.Dispose();
+        Directory.Delete(cacheDir, true);
     }
 
     [Fact]
     public async Task Startup_ConfigFetch_SecondFetch_SendsIfNoneMatchWithAssignmentRevision()
     {
         HttpRequestMessage? captured = null;
-        var accessToken = "at_test";
-        var payload = new ManagedConfigPayload
-        {
-            PayloadSchema = "managed-config/v1",
-            AssignmentRevision = 7,
-            SelectionRevision = 2,
-            RecommendedProfileId = "plan-1",
-            FallbackProfileIds = [],
-            Profiles = [],
-            RoutingPolicy = new { },
-            DnsPolicy = new { },
-            ClientPolicy = new ClientPolicy { AllowClassicMode = false, AllowTun = true, AllowLocalProxy = false, AllowManualSelection = true, AllowAutomaticFailover = true, OfflineGraceSeconds = 3600 },
-        };
-        var (nonce, ciphertext) = NetAccel.Managed.Crypto.SpikeV0EnvelopeCrypto.EncryptForTest(
-            JsonSerializer.Serialize(payload), accessToken);
+        var payload = CreateValidPayload();
 
-        var (orch, vault, http) = CreateOrchestrator((req, ct) =>
+        var (orch, vault, http, cacheDir, serverPublicKey, serverPrivateKey) = CreateOrchestrator((vault, serverPublicKey, serverPrivateKey) => (req, ct) =>
         {
             var path = req.RequestUri?.AbsolutePath ?? "";
             if (path == "/api/v1/client/refresh")
             {
-                var data = new RefreshResponse { AccessToken = accessToken, RefreshToken = "rt2" };
+                var data = new RefreshResponse { AccessToken = "at2", RefreshToken = "rt2", AccountId = 1 };
                 var envelope = new ManagedApiResponse<RefreshResponse> { Code = 200, Message = "ok", ErrorCode = "", Data = data };
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
@@ -533,24 +611,19 @@ public class ManagedStartupOrchestratorTests
                     Content = new StringContent(JsonSerializer.Serialize(envelope), Encoding.UTF8, "application/json"),
                 });
             }
-            if (path == "/api/v1/client/managed/config")
+            if (path == "/api/v1/client/managed/envelope")
             {
                 captured = req;
-                var spikeEnvelope = new ManagedEnvelopeSpikeV0
-                {
-                    Schema = "managed-envelope/spike-v0",
-                    PayloadSchema = "managed-config/v1",
-                    AssignmentRevision = 7,
-                    SelectionRevision = 2,
-                    AccountId = 1,
-                    InstanceId = "i1",
-                    IssuedAt = "2026-06-12T14:00:00Z",
-                    ExpiresAt = "2026-06-12T14:15:00Z",
-                    Algorithm = "access-token-sha256-aes256gcm",
-                    Nonce = nonce,
-                    Ciphertext = ciphertext,
-                };
-                var envelope = new ManagedApiResponse<ManagedEnvelopeSpikeV0> { Code = 200, Message = "ok", ErrorCode = "", Data = spikeEnvelope };
+                var deviceKey = vault.RetrieveAsync(CredentialVaultEntry.DevicePrivateKey).Result;
+                using var deviceEcdh = ECDiffieHellman.Create();
+                deviceEcdh.ImportFromPem(deviceKey!);
+                var devicePublicKey = deviceEcdh.ExportSubjectPublicKeyInfoPem();
+
+                var v1Envelope = MakeV1Envelope(
+                    MakePayloadJson(payload), devicePublicKey, serverPrivateKey,
+                    vault, accountId: 1, instanceId: "i1");
+
+                var envelope = new ManagedApiResponse<ManagedEnvelopeV1> { Code = 200, Message = "ok", ErrorCode = "", Data = v1Envelope };
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new StringContent(JsonSerializer.Serialize(envelope), Encoding.UTF8, "application/json"),
@@ -562,7 +635,8 @@ public class ManagedStartupOrchestratorTests
             });
         });
         await vault.StoreAsync(CredentialVaultEntry.RefreshToken, "rt");
-        await vault.StoreAsync(CredentialVaultEntry.AccessToken, accessToken);
+        await vault.StoreAsync(CredentialVaultEntry.AccessToken, "at");
+        await vault.StoreAsync(CredentialVaultEntry.AccountId, "1");
 
         var result1 = await orch.StartupAsync();
         Assert.Equal(ManagedStartupState.Ready, result1.State);
@@ -576,34 +650,21 @@ public class ManagedStartupOrchestratorTests
         Assert.NotNull(etag);
         Assert.Equal("\"7\"", etag.Tag);
         http.Dispose();
+        Directory.Delete(cacheDir, true);
     }
 
     [Fact]
     public async Task Startup_ConfigFetch_304_KeepsExistingInMemoryConfig()
     {
-        var accessToken = "at_test";
-        var payload = new ManagedConfigPayload
-        {
-            PayloadSchema = "managed-config/v1",
-            AssignmentRevision = 7,
-            SelectionRevision = 2,
-            RecommendedProfileId = "plan-1",
-            FallbackProfileIds = [],
-            Profiles = [],
-            RoutingPolicy = new { },
-            DnsPolicy = new { },
-            ClientPolicy = new ClientPolicy { AllowClassicMode = false, AllowTun = true, AllowLocalProxy = false, AllowManualSelection = true, AllowAutomaticFailover = true, OfflineGraceSeconds = 3600 },
-        };
-        var (nonce, ciphertext) = NetAccel.Managed.Crypto.SpikeV0EnvelopeCrypto.EncryptForTest(
-            JsonSerializer.Serialize(payload), accessToken);
+        var payload = CreateValidPayload();
 
         var configCallCount = 0;
-        var (orch, vault, http) = CreateOrchestrator((req, ct) =>
+        var (orch, vault, http, cacheDir, serverPublicKey, serverPrivateKey) = CreateOrchestrator((vault, serverPublicKey, serverPrivateKey) => (req, ct) =>
         {
             var path = req.RequestUri?.AbsolutePath ?? "";
             if (path == "/api/v1/client/refresh")
             {
-                var data = new RefreshResponse { AccessToken = accessToken, RefreshToken = "rt2" };
+                var data = new RefreshResponse { AccessToken = "at2", RefreshToken = "rt2", AccountId = 1 };
                 var envelope = new ManagedApiResponse<RefreshResponse> { Code = 200, Message = "ok", ErrorCode = "", Data = data };
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
@@ -660,26 +721,21 @@ public class ManagedStartupOrchestratorTests
                     Content = new StringContent(JsonSerializer.Serialize(envelope), Encoding.UTF8, "application/json"),
                 });
             }
-            if (path == "/api/v1/client/managed/config")
+            if (path == "/api/v1/client/managed/envelope")
             {
                 configCallCount++;
                 if (configCallCount == 1)
                 {
-                    var spikeEnvelope = new ManagedEnvelopeSpikeV0
-                    {
-                        Schema = "managed-envelope/spike-v0",
-                        PayloadSchema = "managed-config/v1",
-                        AssignmentRevision = 7,
-                        SelectionRevision = 2,
-                        AccountId = 1,
-                        InstanceId = "i1",
-                        IssuedAt = "2026-06-12T14:00:00Z",
-                        ExpiresAt = "2026-06-12T14:15:00Z",
-                        Algorithm = "access-token-sha256-aes256gcm",
-                        Nonce = nonce,
-                        Ciphertext = ciphertext,
-                    };
-                    var envelope = new ManagedApiResponse<ManagedEnvelopeSpikeV0> { Code = 200, Message = "ok", ErrorCode = "", Data = spikeEnvelope };
+                    var deviceKey = vault.RetrieveAsync(CredentialVaultEntry.DevicePrivateKey).Result;
+                    using var deviceEcdh = ECDiffieHellman.Create();
+                    deviceEcdh.ImportFromPem(deviceKey!);
+                    var devicePublicKey = deviceEcdh.ExportSubjectPublicKeyInfoPem();
+
+                    var v1Envelope = MakeV1Envelope(
+                        MakePayloadJson(payload), devicePublicKey, serverPrivateKey,
+                        vault, accountId: 1, instanceId: "i1");
+
+                    var envelope = new ManagedApiResponse<ManagedEnvelopeV1> { Code = 200, Message = "ok", ErrorCode = "", Data = v1Envelope };
                     return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                     {
                         Content = new StringContent(JsonSerializer.Serialize(envelope), Encoding.UTF8, "application/json"),
@@ -693,7 +749,8 @@ public class ManagedStartupOrchestratorTests
             });
         });
         await vault.StoreAsync(CredentialVaultEntry.RefreshToken, "rt");
-        await vault.StoreAsync(CredentialVaultEntry.AccessToken, accessToken);
+        await vault.StoreAsync(CredentialVaultEntry.AccessToken, "at");
+        await vault.StoreAsync(CredentialVaultEntry.AccountId, "1");
 
         var result1 = await orch.StartupAsync();
         Assert.Equal(ManagedStartupState.Ready, result1.State);
@@ -709,6 +766,7 @@ public class ManagedStartupOrchestratorTests
         Assert.Equal(7, config2.AssignmentRevision);
         Assert.Equal(2, configCallCount);
         http.Dispose();
+        Directory.Delete(cacheDir, true);
     }
 
     [Fact]
@@ -716,39 +774,18 @@ public class ManagedStartupOrchestratorTests
     {
         const string firstAccessToken = "at_first";
         const string refreshedAccessToken = "at_refreshed";
-        var payload = new ManagedConfigPayload
-        {
-            PayloadSchema = "managed-config/v1",
-            AssignmentRevision = 7,
-            SelectionRevision = 2,
-            RecommendedProfileId = "plan-1",
-            FallbackProfileIds = [],
-            Profiles = [],
-            RoutingPolicy = new { },
-            DnsPolicy = new { },
-            ClientPolicy = new ClientPolicy
-            {
-                AllowClassicMode = false,
-                AllowTun = true,
-                AllowLocalProxy = false,
-                AllowManualSelection = true,
-                AllowAutomaticFailover = true,
-                OfflineGraceSeconds = 3600,
-            },
-        };
-        var (nonce, ciphertext) = NetAccel.Managed.Crypto.SpikeV0EnvelopeCrypto.EncryptForTest(
-            JsonSerializer.Serialize(payload), refreshedAccessToken);
+        var payload = CreateValidPayload();
 
         var refreshCalls = 0;
         var configCalls = 0;
-        var (orch, vault, http) = CreateOrchestrator((req, ct) =>
+        var (orch, vault, http, cacheDir, serverPublicKey, serverPrivateKey) = CreateOrchestrator((vault, serverPublicKey, serverPrivateKey) => (req, ct) =>
         {
             var path = req.RequestUri?.AbsolutePath ?? "";
             if (path == "/api/v1/client/refresh")
             {
                 refreshCalls++;
                 var token = refreshCalls == 1 ? firstAccessToken : refreshedAccessToken;
-                var data = new RefreshResponse { AccessToken = token, RefreshToken = $"rt{refreshCalls + 1}" };
+                var data = new RefreshResponse { AccessToken = token, RefreshToken = $"rt{refreshCalls + 1}", AccountId = 1 };
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new StringContent(
@@ -828,7 +865,7 @@ public class ManagedStartupOrchestratorTests
                         "application/json"),
                 });
             }
-            if (path == "/api/v1/client/managed/config")
+            if (path == "/api/v1/client/managed/envelope")
             {
                 configCalls++;
                 if (configCalls == 1)
@@ -846,24 +883,19 @@ public class ManagedStartupOrchestratorTests
                 }
 
                 Assert.Equal($"Bearer {refreshedAccessToken}", req.Headers.Authorization?.ToString());
-                var spikeEnvelope = new ManagedEnvelopeSpikeV0
-                {
-                    Schema = "managed-envelope/spike-v0",
-                    PayloadSchema = "managed-config/v1",
-                    AssignmentRevision = 7,
-                    SelectionRevision = 2,
-                    AccountId = 1,
-                    InstanceId = "i1",
-                    IssuedAt = "2026-06-16T00:00:00Z",
-                    ExpiresAt = "2026-06-16T00:15:00Z",
-                    Algorithm = "access-token-sha256-aes256gcm",
-                    Nonce = nonce,
-                    Ciphertext = ciphertext,
-                };
+                var deviceKey = vault.RetrieveAsync(CredentialVaultEntry.DevicePrivateKey).Result;
+                using var deviceEcdh = ECDiffieHellman.Create();
+                deviceEcdh.ImportFromPem(deviceKey!);
+                var devicePublicKey = deviceEcdh.ExportSubjectPublicKeyInfoPem();
+
+                var v1Envelope = MakeV1Envelope(
+                    MakePayloadJson(payload), devicePublicKey, serverPrivateKey,
+                    vault, accountId: 1, instanceId: "i1");
+
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new StringContent(
-                        JsonSerializer.Serialize(new ManagedApiResponse<ManagedEnvelopeSpikeV0> { Code = 200, Message = "ok", ErrorCode = "", Data = spikeEnvelope }),
+                        JsonSerializer.Serialize(new ManagedApiResponse<ManagedEnvelopeV1> { Code = 200, Message = "ok", ErrorCode = "", Data = v1Envelope }),
                         Encoding.UTF8,
                         "application/json"),
                 });
@@ -887,11 +919,23 @@ public class ManagedStartupOrchestratorTests
                         "application/json"),
                 });
             }
+            if (path == "/api/v1/client/managed/keys")
+            {
+                var data = new DeviceKeyRegisterResponse { Id = "dk1", KeyId = "device-key-1", InstanceId = "i1", CreatedAt = "2026-06-16T00:00:00Z" };
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        JsonSerializer.Serialize(new ManagedApiResponse<DeviceKeyRegisterResponse> { Code = 200, Message = "ok", ErrorCode = "", Data = data }),
+                        Encoding.UTF8,
+                        "application/json"),
+                });
+            }
 
             throw new InvalidOperationException($"Unexpected request: {path}");
         });
         await vault.StoreAsync(CredentialVaultEntry.RefreshToken, "rt1");
         await vault.StoreAsync(CredentialVaultEntry.AccessToken, "stale");
+        await vault.StoreAsync(CredentialVaultEntry.AccountId, "1");
 
         var result = await orch.StartupAsync();
 
@@ -900,34 +944,21 @@ public class ManagedStartupOrchestratorTests
         Assert.Equal(2, configCalls);
         Assert.Equal(7, (await orch.GetCurrentConfigAsync())?.AssignmentRevision);
         http.Dispose();
+        Directory.Delete(cacheDir, true);
     }
 
     [Fact]
     public async Task Startup_ConfigAck_SuccessfulStartup_EmitsReceivedThenValidated_NeverApplied()
     {
-        var accessToken = "at_test";
-        var payload = new ManagedConfigPayload
-        {
-            PayloadSchema = "managed-config/v1",
-            AssignmentRevision = 7,
-            SelectionRevision = 2,
-            RecommendedProfileId = "plan-1",
-            FallbackProfileIds = [],
-            Profiles = [],
-            RoutingPolicy = new { },
-            DnsPolicy = new { },
-            ClientPolicy = new ClientPolicy { AllowClassicMode = false, AllowTun = true, AllowLocalProxy = false, AllowManualSelection = true, AllowAutomaticFailover = true, OfflineGraceSeconds = 3600 },
-        };
-        var (nonce, ciphertext) = NetAccel.Managed.Crypto.SpikeV0EnvelopeCrypto.EncryptForTest(
-            JsonSerializer.Serialize(payload), accessToken);
+        var payload = CreateValidPayload();
 
         var ackStatuses = new List<string>();
-        var (orch, vault, http) = CreateOrchestrator((req, ct) =>
+        var (orch, vault, http, cacheDir, serverPublicKey, serverPrivateKey) = CreateOrchestrator((vault, serverPublicKey, serverPrivateKey) => (req, ct) =>
         {
             var path = req.RequestUri?.AbsolutePath ?? "";
             if (path == "/api/v1/client/refresh")
             {
-                var data = new RefreshResponse { AccessToken = accessToken, RefreshToken = "rt2" };
+                var data = new RefreshResponse { AccessToken = "at2", RefreshToken = "rt2", AccountId = 1 };
                 var envelope = new ManagedApiResponse<RefreshResponse> { Code = 200, Message = "ok", ErrorCode = "", Data = data };
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
@@ -984,23 +1015,18 @@ public class ManagedStartupOrchestratorTests
                     Content = new StringContent(JsonSerializer.Serialize(envelope), Encoding.UTF8, "application/json"),
                 });
             }
-            if (path == "/api/v1/client/managed/config")
+            if (path == "/api/v1/client/managed/envelope")
             {
-                var spikeEnvelope = new ManagedEnvelopeSpikeV0
-                {
-                    Schema = "managed-envelope/spike-v0",
-                    PayloadSchema = "managed-config/v1",
-                    AssignmentRevision = 7,
-                    SelectionRevision = 2,
-                    AccountId = 1,
-                    InstanceId = "i1",
-                    IssuedAt = "2026-06-12T14:00:00Z",
-                    ExpiresAt = "2026-06-12T14:15:00Z",
-                    Algorithm = "access-token-sha256-aes256gcm",
-                    Nonce = nonce,
-                    Ciphertext = ciphertext,
-                };
-                var envelope = new ManagedApiResponse<ManagedEnvelopeSpikeV0> { Code = 200, Message = "ok", ErrorCode = "", Data = spikeEnvelope };
+                var deviceKey = vault.RetrieveAsync(CredentialVaultEntry.DevicePrivateKey).Result;
+                using var deviceEcdh = ECDiffieHellman.Create();
+                deviceEcdh.ImportFromPem(deviceKey!);
+                var devicePublicKey = deviceEcdh.ExportSubjectPublicKeyInfoPem();
+
+                var v1Envelope = MakeV1Envelope(
+                    MakePayloadJson(payload), devicePublicKey, serverPrivateKey,
+                    vault, accountId: 1, instanceId: "i1");
+
+                var envelope = new ManagedApiResponse<ManagedEnvelopeV1> { Code = 200, Message = "ok", ErrorCode = "", Data = v1Envelope };
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new StringContent(JsonSerializer.Serialize(envelope), Encoding.UTF8, "application/json"),
@@ -1022,7 +1048,8 @@ public class ManagedStartupOrchestratorTests
             });
         });
         await vault.StoreAsync(CredentialVaultEntry.RefreshToken, "rt");
-        await vault.StoreAsync(CredentialVaultEntry.AccessToken, accessToken);
+        await vault.StoreAsync(CredentialVaultEntry.AccessToken, "at");
+        await vault.StoreAsync(CredentialVaultEntry.AccountId, "1");
 
         var result = await orch.StartupAsync();
         Assert.Equal(ManagedStartupState.Ready, result.State);
@@ -1030,19 +1057,19 @@ public class ManagedStartupOrchestratorTests
         Assert.Contains("validated", ackStatuses);
         Assert.DoesNotContain("applied", ackStatuses);
         http.Dispose();
+        Directory.Delete(cacheDir, true);
     }
 
     [Fact]
     public async Task Startup_ConfigAck_DecryptFailure_EmitsSanitizedFailed()
     {
-        var accessToken = "at_test";
         var ackStatuses = new List<(string Status, string? Detail)>();
-        var (orch, vault, http) = CreateOrchestrator((req, ct) =>
+        var (orch, vault, http, cacheDir, serverPublicKey, serverPrivateKey) = CreateOrchestrator((vault, serverPublicKey, serverPrivateKey) => (req, ct) =>
         {
             var path = req.RequestUri?.AbsolutePath ?? "";
             if (path == "/api/v1/client/refresh")
             {
-                var data = new RefreshResponse { AccessToken = accessToken, RefreshToken = "rt2" };
+                var data = new RefreshResponse { AccessToken = "at2", RefreshToken = "rt2", AccountId = 1 };
                 var envelope = new ManagedApiResponse<RefreshResponse> { Code = 200, Message = "ok", ErrorCode = "", Data = data };
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
@@ -1099,24 +1126,24 @@ public class ManagedStartupOrchestratorTests
                     Content = new StringContent(JsonSerializer.Serialize(envelope), Encoding.UTF8, "application/json"),
                 });
             }
-            if (path == "/api/v1/client/managed/config")
+            if (path == "/api/v1/client/managed/envelope")
             {
-                // Return a valid envelope but with tampered ciphertext so decrypt fails
-                var spikeEnvelope = new ManagedEnvelopeSpikeV0
-                {
-                    Schema = "managed-envelope/spike-v0",
-                    PayloadSchema = "managed-config/v1",
-                    AssignmentRevision = 7,
-                    SelectionRevision = 2,
-                    AccountId = 1,
-                    InstanceId = "i1",
-                    IssuedAt = "2026-06-12T14:00:00Z",
-                    ExpiresAt = "2026-06-12T14:15:00Z",
-                    Algorithm = "access-token-sha256-aes256gcm",
-                    Nonce = "badnonce",
-                    Ciphertext = "badciphertext",
-                };
-                var envelope = new ManagedApiResponse<ManagedEnvelopeSpikeV0> { Code = 200, Message = "ok", ErrorCode = "", Data = spikeEnvelope };
+                // Return a valid v1 envelope but with tampered ciphertext so decrypt fails
+                var deviceKey = vault.RetrieveAsync(CredentialVaultEntry.DevicePrivateKey).Result;
+                using var deviceEcdh = ECDiffieHellman.Create();
+                deviceEcdh.ImportFromPem(deviceKey!);
+                var devicePublicKey = deviceEcdh.ExportSubjectPublicKeyInfoPem();
+
+                var v1Envelope = MakeV1Envelope(
+                    MakePayloadJson(CreateValidPayload()),
+                    devicePublicKey, serverPrivateKey,
+                    vault, accountId: 1, instanceId: "i1");
+
+                var bytes = Convert.FromBase64String(v1Envelope.Ciphertext);
+                bytes[^1] ^= 0xFF;
+                v1Envelope.Ciphertext = Convert.ToBase64String(bytes);
+
+                var envelope = new ManagedApiResponse<ManagedEnvelopeV1> { Code = 200, Message = "ok", ErrorCode = "", Data = v1Envelope };
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new StringContent(JsonSerializer.Serialize(envelope), Encoding.UTF8, "application/json"),
@@ -1138,7 +1165,8 @@ public class ManagedStartupOrchestratorTests
             });
         });
         await vault.StoreAsync(CredentialVaultEntry.RefreshToken, "rt");
-        await vault.StoreAsync(CredentialVaultEntry.AccessToken, accessToken);
+        await vault.StoreAsync(CredentialVaultEntry.AccessToken, "at");
+        await vault.StoreAsync(CredentialVaultEntry.AccountId, "1");
 
         var result = await orch.StartupAsync();
         Assert.Equal(ManagedStartupState.Ready, result.State);
@@ -1152,33 +1180,20 @@ public class ManagedStartupOrchestratorTests
         Assert.Equal("failed", failed.Status);
         Assert.NotNull(failed.Detail);
         http.Dispose();
+        Directory.Delete(cacheDir, true);
     }
 
     [Fact]
     public async Task Startup_ConfigAck_Failure_DoesNotPersistPlaintextOrStartRuntime()
     {
-        var accessToken = "at_test";
-        var payload = new ManagedConfigPayload
-        {
-            PayloadSchema = "managed-config/v1",
-            AssignmentRevision = 7,
-            SelectionRevision = 2,
-            RecommendedProfileId = "plan-1",
-            FallbackProfileIds = [],
-            Profiles = [],
-            RoutingPolicy = new { },
-            DnsPolicy = new { },
-            ClientPolicy = new ClientPolicy { AllowClassicMode = false, AllowTun = true, AllowLocalProxy = false, AllowManualSelection = true, AllowAutomaticFailover = true, OfflineGraceSeconds = 3600 },
-        };
-        var (nonce, ciphertext) = NetAccel.Managed.Crypto.SpikeV0EnvelopeCrypto.EncryptForTest(
-            JsonSerializer.Serialize(payload), accessToken);
+        var payload = CreateValidPayload();
 
-        var (orch, vault, http) = CreateOrchestrator((req, ct) =>
+        var (orch, vault, http, cacheDir, serverPublicKey, serverPrivateKey) = CreateOrchestrator((vault, serverPublicKey, serverPrivateKey) => (req, ct) =>
         {
             var path = req.RequestUri?.AbsolutePath ?? "";
             if (path == "/api/v1/client/refresh")
             {
-                var data = new RefreshResponse { AccessToken = accessToken, RefreshToken = "rt2" };
+                var data = new RefreshResponse { AccessToken = "at2", RefreshToken = "rt2", AccountId = 1 };
                 var envelope = new ManagedApiResponse<RefreshResponse> { Code = 200, Message = "ok", ErrorCode = "", Data = data };
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
@@ -1235,23 +1250,18 @@ public class ManagedStartupOrchestratorTests
                     Content = new StringContent(JsonSerializer.Serialize(envelope), Encoding.UTF8, "application/json"),
                 });
             }
-            if (path == "/api/v1/client/managed/config")
+            if (path == "/api/v1/client/managed/envelope")
             {
-                var spikeEnvelope = new ManagedEnvelopeSpikeV0
-                {
-                    Schema = "managed-envelope/spike-v0",
-                    PayloadSchema = "managed-config/v1",
-                    AssignmentRevision = 7,
-                    SelectionRevision = 2,
-                    AccountId = 1,
-                    InstanceId = "i1",
-                    IssuedAt = "2026-06-12T14:00:00Z",
-                    ExpiresAt = "2026-06-12T14:15:00Z",
-                    Algorithm = "access-token-sha256-aes256gcm",
-                    Nonce = nonce,
-                    Ciphertext = ciphertext,
-                };
-                var envelope = new ManagedApiResponse<ManagedEnvelopeSpikeV0> { Code = 200, Message = "ok", ErrorCode = "", Data = spikeEnvelope };
+                var deviceKey = vault.RetrieveAsync(CredentialVaultEntry.DevicePrivateKey).Result;
+                using var deviceEcdh = ECDiffieHellman.Create();
+                deviceEcdh.ImportFromPem(deviceKey!);
+                var devicePublicKey = deviceEcdh.ExportSubjectPublicKeyInfoPem();
+
+                var v1Envelope = MakeV1Envelope(
+                    MakePayloadJson(payload), devicePublicKey, serverPrivateKey,
+                    vault, accountId: 1, instanceId: "i1");
+
+                var envelope = new ManagedApiResponse<ManagedEnvelopeV1> { Code = 200, Message = "ok", ErrorCode = "", Data = v1Envelope };
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new StringContent(JsonSerializer.Serialize(envelope), Encoding.UTF8, "application/json"),
@@ -1271,13 +1281,15 @@ public class ManagedStartupOrchestratorTests
             });
         });
         await vault.StoreAsync(CredentialVaultEntry.RefreshToken, "rt");
-        await vault.StoreAsync(CredentialVaultEntry.AccessToken, accessToken);
+        await vault.StoreAsync(CredentialVaultEntry.AccessToken, "at");
+        await vault.StoreAsync(CredentialVaultEntry.AccountId, "1");
 
         var result = await orch.StartupAsync();
         Assert.Equal(ManagedStartupState.Ready, result.State);
         var config = await orch.GetCurrentConfigAsync();
         Assert.NotNull(config);
         http.Dispose();
+        Directory.Delete(cacheDir, true);
     }
 
     private sealed class FakeHandler : HttpMessageHandler

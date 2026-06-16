@@ -17,6 +17,7 @@ public interface IAuthService
     Task LogoutAsync(CancellationToken ct = default);
     Task<bool> HasCredentialsAsync();
     Task<string?> GetAccessTokenAsync();
+    Task<int?> GetAccountIdAsync();
 
     /// <summary>
     /// Execute an authenticated operation with automatic one-time refresh on HTTP 401.
@@ -82,6 +83,7 @@ public sealed class AuthService : IAuthService
 
             await _vault.StoreAsync(CredentialVaultEntry.AccessToken, result.AccessToken);
             await _vault.StoreAsync(CredentialVaultEntry.RefreshToken, result.RefreshToken);
+            await _vault.StoreAsync(CredentialVaultEntry.AccountId, result.AccountId.ToString());
 
             return new AuthResult { Kind = AuthResultKind.Success };
         }
@@ -147,6 +149,7 @@ public sealed class AuthService : IAuthService
 
                 await _vault.StoreAsync(CredentialVaultEntry.AccessToken, result.AccessToken);
                 await _vault.StoreAsync(CredentialVaultEntry.RefreshToken, result.RefreshToken);
+                await _vault.StoreAsync(CredentialVaultEntry.AccountId, result.AccountId.ToString());
 
                 return new AuthResult { Kind = AuthResultKind.Success };
             }
@@ -201,6 +204,16 @@ public sealed class AuthService : IAuthService
     public async Task<string?> GetAccessTokenAsync()
     {
         return await _vault.RetrieveAsync(CredentialVaultEntry.AccessToken);
+    }
+
+    public async Task<int?> GetAccountIdAsync()
+    {
+        var raw = await _vault.RetrieveAsync(CredentialVaultEntry.AccountId);
+        if (!string.IsNullOrEmpty(raw) && int.TryParse(raw, out var id))
+        {
+            return id;
+        }
+        return null;
     }
 
     public async Task<AuthOperationResult<T>> ExecuteWithRefreshAsync<T>(
@@ -272,6 +285,7 @@ public sealed class AuthService : IAuthService
     {
         await _vault.DeleteAsync(CredentialVaultEntry.AccessToken);
         await _vault.DeleteAsync(CredentialVaultEntry.RefreshToken);
+        await _vault.DeleteAsync(CredentialVaultEntry.AccountId);
     }
 
     private async Task LogAsync(string message)

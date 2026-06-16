@@ -1,6 +1,8 @@
 using NetAccel.Managed.Api;
 using NetAccel.Managed.Auth;
+using NetAccel.Managed.Cache;
 using NetAccel.Managed.Crypto;
+using NetAccel.Managed.Domain;
 using NetAccel.Managed.Dto;
 using NetAccel.Managed.Identity;
 using NetAccel.Managed.Instance;
@@ -10,7 +12,7 @@ using NetAccel.Managed.Vault;
 namespace NetAccel.Managed.Startup;
 
 /// <summary>
-/// Coordinates managed startup: vault -> refresh -> instance -> heartbeat -> policy/status -> config fetch/decrypt/ack.
+/// Coordinates managed startup: vault -> refresh -> instance -> device key -> heartbeat -> policy/status -> config fetch/decrypt/ack.
 /// Does not start core, modify system proxy, enable TUN, or write to classic SQLite.
 /// </summary>
 public interface IManagedStartupOrchestrator
@@ -26,6 +28,10 @@ public sealed class ManagedStartupOrchestrator : IManagedStartupOrchestrator
     private readonly IInstanceService _instance;
     private readonly IManagedSelectionService _selection;
     private readonly IManagedConfigService _configService;
+    private readonly IDeviceKeyManager _deviceKeyManager;
+    private readonly IEnvelopeCacheManager _envelopeCache;
+    private readonly IOfflineConfigRules _offlineRules;
+    private readonly IServerKeyProvider _serverKeyProvider;
     private readonly ManagedApiClient _api;
     private readonly ICredentialVault _vault;
     private readonly string _clientVersion;
@@ -41,6 +47,10 @@ public sealed class ManagedStartupOrchestrator : IManagedStartupOrchestrator
         IInstanceService instance,
         IManagedSelectionService selection,
         IManagedConfigService configService,
+        IDeviceKeyManager deviceKeyManager,
+        IEnvelopeCacheManager envelopeCache,
+        IOfflineConfigRules offlineRules,
+        IServerKeyProvider serverKeyProvider,
         ManagedApiClient api,
         ICredentialVault vault,
         string clientVersion,
@@ -53,6 +63,10 @@ public sealed class ManagedStartupOrchestrator : IManagedStartupOrchestrator
         _instance = instance;
         _selection = selection;
         _configService = configService;
+        _deviceKeyManager = deviceKeyManager;
+        _envelopeCache = envelopeCache;
+        _offlineRules = offlineRules;
+        _serverKeyProvider = serverKeyProvider;
         _api = api;
         _vault = vault;
         _clientVersion = clientVersion;
@@ -116,7 +130,14 @@ public sealed class ManagedStartupOrchestrator : IManagedStartupOrchestrator
                 }
             }
 
-            // 4. Heartbeat / control
+            // 4. Ensure device key and register with instance
+            var (deviceKeyResult, deviceKeyStartupResult) = await EnsureDeviceKeyAsync(ct);
+            if (!deviceKeyResult.IsSuccess)
+            {
+                return deviceKeyStartupResult!;
+            }
+
+            // 5. Heartbeat / control
             var hbResult = await _instance.HeartbeatAsync(
                 _clientVersion,
                 _coreVersions,
@@ -127,6 +148,8 @@ public sealed class ManagedStartupOrchestrator : IManagedStartupOrchestrator
 
             if (hbResult.Kind == HeartbeatResultKind.Revoked)
             {
+                await _envelopeCache.ClearAsync(ct);
+                await _deviceKeyManager.ClearAsync();
                 return new ManagedStartupResult { State = ManagedStartupState.InstanceRevoked, Message = hbResult.ErrorCode, RequestId = hbResult.RequestId };
             }
             if (hbResult.Kind == HeartbeatResultKind.AccountDisabled)
@@ -142,10 +165,12 @@ public sealed class ManagedStartupOrchestrator : IManagedStartupOrchestrator
                 return new ManagedStartupResult { State = ManagedStartupState.MandatoryUpdate, Message = hbResult.ErrorCode, RequestId = hbResult.RequestId };
             }
 
-            // 5. Policy / status
+            // 6. Policy / status
             var statusResult = await _selection.GetStatusAsync(ct);
             if (statusResult.Kind == PolicyStatusResultKind.Revoked)
             {
+                await _envelopeCache.ClearAsync(ct);
+                await _deviceKeyManager.ClearAsync();
                 return new ManagedStartupResult { State = ManagedStartupState.InstanceRevoked, Message = statusResult.ErrorCode, RequestId = statusResult.RequestId };
             }
             if (statusResult.Kind == PolicyStatusResultKind.AccountDisabled)
@@ -162,8 +187,8 @@ public sealed class ManagedStartupOrchestrator : IManagedStartupOrchestrator
                 return new ManagedStartupResult { State = ManagedStartupState.NoAssignment };
             }
 
-            // 6. Config fetch / decrypt / ack (spike-v0)
-            var (payload, revision, envelopeParsed) = await FetchConfigAsync(ct);
+            // 7. Config fetch / decrypt / ack using managed-envelope/v1
+            var (payload, revision, envelopeParsed, fromOffline) = await FetchConfigV1Async(ct);
 
             if (envelopeParsed && revision.HasValue)
             {
@@ -180,6 +205,12 @@ public sealed class ManagedStartupOrchestrator : IManagedStartupOrchestrator
             if (envelopeParsed && revision.HasValue)
             {
                 await SafeAckAsync(revision.Value, "failed", "decrypt_failed", "decrypt_failed", ct);
+            }
+
+            // If we have an offline config, we can still report Ready
+            if (fromOffline && _currentConfig != null)
+            {
+                return new ManagedStartupResult { State = ManagedStartupState.Ready };
             }
 
             // Config fetch failure is not fatal for startup state; we can retry later
@@ -201,6 +232,65 @@ public sealed class ManagedStartupOrchestrator : IManagedStartupOrchestrator
         return _currentConfig;
     }
 
+    private async Task<(EnsureResult Result, ManagedStartupResult? StartupResult)> EnsureDeviceKeyAsync(CancellationToken ct)
+    {
+        var deviceKey = await _deviceKeyManager.GetOrCreateKeyAsync();
+        var instanceId = await _instance.GetInstanceIdAsync();
+        var instanceCredential = await _vault.RetrieveAsync(CredentialVaultEntry.InstanceCredential);
+
+        if (string.IsNullOrEmpty(instanceId) || string.IsNullOrEmpty(instanceCredential))
+        {
+            return (new EnsureResult { IsSuccess = false }, new ManagedStartupResult { State = ManagedStartupState.Faulted, Message = "missing_instance_identity" });
+        }
+
+        var opResult = await _auth.ExecuteWithRefreshAsync(
+            async (token, ctInner) => await _api.RegisterDeviceKeyAsync(
+                new DeviceKeyRegisterRequest
+                {
+                    KeyId = deviceKey.KeyId,
+                    PublicKeyPem = deviceKey.PublicKeyPem,
+                },
+                accessToken: token,
+                instanceCredential: instanceCredential,
+                ct: ctInner),
+            ct);
+
+        if (opResult.IsSuccess)
+        {
+            return (new EnsureResult { IsSuccess = true }, null);
+        }
+
+        if (opResult.RefreshResult != null)
+        {
+            var state = opResult.RefreshResult.Kind switch
+            {
+                AuthResultKind.AccountDisabled => ManagedStartupState.AccountDisabled,
+                AuthResultKind.NetworkError => ManagedStartupState.Offline,
+                _ => ManagedStartupState.Faulted,
+            };
+            return (new EnsureResult { IsSuccess = false }, new ManagedStartupResult { State = state, Message = opResult.RefreshResult.ErrorCode, RequestId = opResult.RefreshResult.RequestId });
+        }
+
+        if (opResult.OperationException is { } ex)
+        {
+            var state = ex.ErrorCode switch
+            {
+                ManagedErrorCode.ClientInstanceRevoked => ManagedStartupState.InstanceRevoked,
+                ManagedErrorCode.ClientAccountInactive => ManagedStartupState.AccountDisabled,
+                ManagedErrorCode.ManagedKeyRevoked => ManagedStartupState.InstanceRevoked,
+                _ => ManagedStartupState.Faulted,
+            };
+            if (state == ManagedStartupState.InstanceRevoked)
+            {
+                await _envelopeCache.ClearAsync(ct);
+                await _deviceKeyManager.ClearAsync();
+            }
+            return (new EnsureResult { IsSuccess = false }, new ManagedStartupResult { State = state, Message = ex.ErrorCode, RequestId = ex.RequestId });
+        }
+
+        return (new EnsureResult { IsSuccess = false }, new ManagedStartupResult { State = ManagedStartupState.Faulted, Message = "device_key_registration_failed" });
+    }
+
     private async Task SafeAckAsync(int revision, string status, string? errorCode, string? errorDetail, CancellationToken ct)
     {
         try
@@ -213,27 +303,49 @@ public sealed class ManagedStartupOrchestrator : IManagedStartupOrchestrator
         }
     }
 
-    private async Task<(ManagedConfigPayload? Payload, int? Revision, bool EnvelopeParsed)> FetchConfigAsync(CancellationToken ct)
+    private async Task<(ManagedConfigPayload? Payload, int? Revision, bool EnvelopeParsed, bool FromOffline)> FetchConfigV1Async(CancellationToken ct)
     {
         var instanceCredential = await _vault.RetrieveAsync(CredentialVaultEntry.InstanceCredential);
         if (string.IsNullOrEmpty(instanceCredential))
         {
-            return (null, null, false);
+            return (null, null, false, false);
         }
 
-        Dictionary<string, string>? extraHeaders = null;
+        var instanceId = await _instance.GetInstanceIdAsync();
+        var accountId = await _auth.GetAccountIdAsync();
+        var deviceKey = await _deviceKeyManager.GetCurrentKeyAsync();
+        var serverPublicKey = await _serverKeyProvider.GetServerPublicKeyPemAsync();
+        var devicePrivateKey = await _deviceKeyManager.GetPrivateKeyPemAsync();
+
+        if (string.IsNullOrEmpty(instanceId) || deviceKey == null || string.IsNullOrEmpty(serverPublicKey) || string.IsNullOrEmpty(devicePrivateKey))
+        {
+            await LogAsync("Fetch config skipped: missing identity or keys");
+            return (null, null, false, false);
+        }
+
+        // Build If-None-Match from current in-memory config or cached envelope
+        var cachedEntry = await _envelopeCache.ReadAsync(ct);
+        string? ifNoneMatch = null;
         if (_currentConfig != null)
         {
-            extraHeaders = new Dictionary<string, string>
-            {
-                ["If-None-Match"] = $"\"{_currentConfig.AssignmentRevision}\"",
-            };
+            ifNoneMatch = $"\"{_currentConfig.AssignmentRevision}\"";
         }
+        else if (cachedEntry != null)
+        {
+            ifNoneMatch = $"\"{cachedEntry.Metadata.AssignmentRevision}\"";
+        }
+
+        var extraHeaders = new Dictionary<string, string>();
+        if (!string.IsNullOrEmpty(ifNoneMatch))
+        {
+            extraHeaders["If-None-Match"] = ifNoneMatch;
+        }
+        extraHeaders["X-Device-Key-Id"] = deviceKey.KeyId;
 
         var opResult = await _auth.ExecuteWithRefreshAsync(
             async (token, ctInner) => await _api.SendRawAsync(
                 HttpMethod.Get,
-                "/client/managed/config",
+                "/client/managed/envelope",
                 null,
                 accessToken: token,
                 instanceCredential: instanceCredential,
@@ -251,45 +363,144 @@ public sealed class ManagedStartupOrchestrator : IManagedStartupOrchestrator
             {
                 await LogAsync($"Config fetch API error: {ex.ErrorCode}");
             }
-            return (null, null, false);
+
+            // Try offline fallback
+            var offlineResult = _offlineRules.Evaluate(cachedEntry, instanceId, deviceKey.KeyId);
+            if (offlineResult.CanUseOffline && cachedEntry != null)
+            {
+                var offlinePayload = TryDecryptCached(cachedEntry.Envelope, devicePrivateKey, serverPublicKey, instanceId, accountId, deviceKey.KeyId);
+                if (offlinePayload != null)
+                {
+                    await LogAsync("Using offline cached config");
+                    return (offlinePayload, cachedEntry.Metadata.AssignmentRevision, true, true);
+                }
+            }
+
+            return (null, null, false, false);
         }
 
         var (status, content, _) = opResult.Value;
 
         if (status == System.Net.HttpStatusCode.NotModified)
         {
-            return (_currentConfig, _currentConfig?.AssignmentRevision, true);
+            // Use cached or in-memory config
+            if (_currentConfig != null)
+            {
+                return (_currentConfig, _currentConfig.AssignmentRevision, true, false);
+            }
+
+            if (cachedEntry != null)
+            {
+                var payload = TryDecryptCached(cachedEntry.Envelope, devicePrivateKey, serverPublicKey, instanceId, accountId, deviceKey.KeyId);
+                return (payload, cachedEntry.Metadata.AssignmentRevision, true, payload != null);
+            }
+
+            return (null, null, true, false);
         }
 
         try
         {
             if (!string.IsNullOrEmpty(content))
             {
-                var apiEnvelope = System.Text.Json.JsonSerializer.Deserialize<ManagedApiResponse<ManagedEnvelopeSpikeV0>>(content, new System.Text.Json.JsonSerializerOptions
+                var apiEnvelope = System.Text.Json.JsonSerializer.Deserialize<ManagedApiResponse<ManagedEnvelopeV1>>(content, new System.Text.Json.JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true,
                 });
+
                 if (apiEnvelope?.Data != null)
                 {
                     var envelope = apiEnvelope.Data;
-                    try
+
+                    // Verify and decrypt
+                    var payload = ManagedEnvelopeV1Crypto.DecryptAndVerify(
+                        envelope,
+                        devicePrivateKey,
+                        serverPublicKey,
+                        instanceId,
+                        accountId ?? envelope.AccountId,
+                        deviceKey.KeyId);
+
+                    if (payload != null)
                     {
-                        var decrypted = SpikeV0EnvelopeCrypto.Decrypt(envelope, await _auth.GetAccessTokenAsync() ?? string.Empty);
-                        return (decrypted, envelope.AssignmentRevision, true);
+                        var validation = ManagedProfileValidator.ValidatePayload(payload);
+                        if (validation.Success)
+                        {
+                            // Atomically replace cache
+                            try
+                            {
+                                await _envelopeCache.WriteAsync(envelope, ct);
+                            }
+                            catch (Exception ex)
+                            {
+                                await LogAsync($"Cache write error: {ex.GetType().Name}");
+                            }
+
+                            return (payload, envelope.AssignmentRevision, true, false);
+                        }
+
+                        await LogAsync($"Payload validation failed: {string.Join("; ", validation.Errors)}");
+
+                        // On invalid new envelope, keep last valid cache and report failure
+                        var cached = await _envelopeCache.ReadAsync(ct);
+                        if (cached != null)
+                        {
+                            var fallback = TryDecryptCached(cached.Envelope, devicePrivateKey, serverPublicKey, instanceId, accountId, deviceKey.KeyId);
+                            if (fallback != null)
+                            {
+                                return (fallback, envelope.AssignmentRevision, true, false);
+                            }
+                        }
+
+                        return (null, envelope.AssignmentRevision, true, false);
                     }
-                    catch
+
+                    await LogAsync("Envelope decrypt/verify failed");
+
+                    // Decrypt failed but envelope was structurally valid; keep last valid cache
+                    var lastValid = await _envelopeCache.ReadAsync(ct);
+                    if (lastValid != null)
                     {
-                        return (null, envelope.AssignmentRevision, true);
+                        var fallback = TryDecryptCached(lastValid.Envelope, devicePrivateKey, serverPublicKey, instanceId, accountId, deviceKey.KeyId);
+                        if (fallback != null)
+                        {
+                            return (fallback, envelope.AssignmentRevision, true, false);
+                        }
                     }
+
+                    return (null, envelope.AssignmentRevision, true, false);
                 }
             }
         }
-        catch (NotSupportedException)
+        catch (Exception ex)
         {
-            await LogAsync("Config fetch envelope algorithm not supported");
+            await LogAsync($"Config fetch parse error: {ex.GetType().Name}");
         }
 
-        return (null, null, false);
+        return (null, null, false, false);
+    }
+
+    private ManagedConfigPayload? TryDecryptCached(
+        ManagedEnvelopeV1 envelope,
+        string devicePrivateKey,
+        string serverPublicKey,
+        string instanceId,
+        int? accountId,
+        string keyId)
+    {
+        try
+        {
+            return ManagedEnvelopeV1Crypto.DecryptAndVerify(
+                envelope,
+                devicePrivateKey,
+                serverPublicKey,
+                instanceId,
+                accountId ?? envelope.AccountId,
+                keyId);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private async Task LogAsync(string message)
@@ -298,5 +509,10 @@ public sealed class ManagedStartupOrchestrator : IManagedStartupOrchestrator
         {
             await _logAsync(message);
         }
+    }
+
+    private sealed class EnsureResult
+    {
+        public bool IsSuccess { get; init; }
     }
 }

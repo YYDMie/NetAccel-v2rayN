@@ -19,6 +19,9 @@ public sealed class LoginResponse
     [JsonPropertyName("refresh_token")]
     public string RefreshToken { get; set; } = string.Empty;
 
+    [JsonPropertyName("account_id")]
+    public int AccountId { get; set; }
+
     [JsonPropertyName("expires_at")]
     public string? ExpiresAt { get; set; }
 }
@@ -36,6 +39,9 @@ public sealed class RefreshResponse
 
     [JsonPropertyName("refresh_token")]
     public string RefreshToken { get; set; } = string.Empty;
+
+    [JsonPropertyName("account_id")]
+    public int AccountId { get; set; }
 
     [JsonPropertyName("expires_at")]
     public string? ExpiresAt { get; set; }

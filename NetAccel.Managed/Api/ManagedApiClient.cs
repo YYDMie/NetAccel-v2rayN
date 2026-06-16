@@ -264,4 +264,44 @@ public sealed class ManagedApiClient : IDisposable
             throw new ManagedOperationCancelledException($"Request to {path} was cancelled");
         }
     }
+
+    /// <summary>
+    /// Registers a P-256 device public key for the current instance.
+    /// </summary>
+    public async Task<DeviceKeyRegisterResponse> RegisterDeviceKeyAsync(
+        DeviceKeyRegisterRequest request,
+        string accessToken,
+        string instanceCredential,
+        CancellationToken ct = default)
+    {
+        return await PostAsync<DeviceKeyRegisterResponse>(
+            "/client/managed/keys",
+            request,
+            accessToken: accessToken,
+            instanceCredential: instanceCredential,
+            ct: ct);
+    }
+
+    /// <summary>
+    /// Fetches the stable managed-envelope/v1 for the current instance.
+    /// </summary>
+    public async Task<ManagedEnvelopeV1> GetEnvelopeV1Async(
+        string accessToken,
+        string instanceCredential,
+        string? ifNoneMatch = null,
+        CancellationToken ct = default)
+    {
+        var extraHeaders = new Dictionary<string, string>();
+        if (!string.IsNullOrEmpty(ifNoneMatch))
+        {
+            extraHeaders["If-None-Match"] = ifNoneMatch;
+        }
+
+        return await GetAsync<ManagedEnvelopeV1>(
+            "/client/managed/envelope",
+            accessToken: accessToken,
+            instanceCredential: instanceCredential,
+            extraHeaders: extraHeaders,
+            ct: ct);
+    }
 }
