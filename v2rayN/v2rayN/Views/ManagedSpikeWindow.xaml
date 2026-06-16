@@ -1,0 +1,76 @@
+<Window
+    x:Class="v2rayN.Views.ManagedSpikeWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="NetAccel Managed Spike (WP-03)"
+    Width="640"
+    Height="720"
+    MinWidth="480"
+    MinHeight="480"
+    WindowStartupLocation="CenterScreen">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="16">
+            <TextBlock FontSize="18" FontWeight="Bold" Margin="0,0,0,12"
+                      Text="NetAccel Managed Spike (WP-03)" />
+            <TextBlock Foreground="Gray" Margin="0,0,0,16"
+                      Text="This is a minimal verification window, not the final UI." />
+
+            <!-- Login -->
+            <GroupBox Header="Login">
+                <StackPanel Margin="8">
+                    <TextBlock Text="Username" />
+                    <TextBox x:Name="txtUsername" Text="" />
+                    <TextBlock Text="Password" Margin="0,8,0,0" />
+                    <PasswordBox x:Name="txtPassword" />
+                    <Button x:Name="btnLogin" Content="Login" Margin="0,8,0,0" Click="BtnLogin_Click" />
+                    <Button x:Name="btnLogout" Content="Logout" Margin="0,4,0,0" Click="BtnLogout_Click" />
+                    <TextBlock x:Name="lblLoginStatus" Margin="0,4,0,0" Text="Not logged in" />
+                </StackPanel>
+            </GroupBox>
+
+            <!-- Instance -->
+            <GroupBox Header="Instance" Margin="0,8,0,0">
+                <StackPanel Margin="8">
+                    <Button x:Name="btnRegister" Content="Register Instance" Click="BtnRegister_Click" />
+                    <Button x:Name="btnRecover" Content="Recover Instance" Margin="0,4,0,0" Click="BtnRecover_Click" />
+                    <TextBlock x:Name="lblInstanceStatus" Margin="0,4,0,0" Text="No instance" />
+                </StackPanel>
+            </GroupBox>
+
+            <!-- Policy / Status -->
+            <GroupBox Header="Policy &amp; Status" Margin="0,8,0,0">
+                <StackPanel Margin="8">
+                    <Button x:Name="btnFetchStatus" Content="Fetch Policy &amp; Status" Click="BtnFetchStatus_Click" />
+                    <TextBlock x:Name="lblPolicySummary" Margin="0,4,0,0" Text="" TextWrapping="Wrap" />
+                    <TextBlock x:Name="lblStatusSummary" Margin="0,4,0,0" Text="" TextWrapping="Wrap" />
+                </StackPanel>
+            </GroupBox>
+
+            <!-- Profiles -->
+            <GroupBox Header="Assigned Profiles" Margin="0,8,0,0">
+                <StackPanel Margin="8">
+                    <ListBox x:Name="lstProfiles" Height="120" />
+                </StackPanel>
+            </GroupBox>
+
+            <!-- Selection -->
+            <GroupBox Header="Selection" Margin="0,8,0,0">
+                <StackPanel Margin="8">
+                    <RadioButton x:Name="rbAuto" Content="Automatic" IsChecked="True" />
+                    <RadioButton x:Name="rbManual" Content="Manual" />
+                    <ComboBox x:Name="cmbProfiles" Margin="0,4,0,0" IsEnabled="False" />
+                    <Button x:Name="btnUpdateSelection" Content="Update Selection" Margin="0,4,0,0" Click="BtnUpdateSelection_Click" />
+                    <TextBlock x:Name="lblSelectionResult" Margin="0,4,0,0" Text="" />
+                </StackPanel>
+            </GroupBox>
+
+            <!-- Config Sync -->
+            <GroupBox Header="Config Sync" Margin="0,8,0,0">
+                <StackPanel Margin="8">
+                    <Button x:Name="btnSyncConfig" Content="Sync Config" Click="BtnSyncConfig_Click" />
+                    <TextBlock x:Name="lblConfigResult" Margin="0,4,0,0" Text="" TextWrapping="Wrap" />
+                </StackPanel>
+            </GroupBox>
+        </StackPanel>
+    </ScrollViewer>
+</Window>

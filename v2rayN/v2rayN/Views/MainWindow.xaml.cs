@@ -25,6 +25,7 @@ public partial class MainWindow
         menuPromotion.Click += MenuPromotion_Click;
         menuClose.Click += MenuClose_Click;
         menuCheckUpdate.Click += MenuCheckUpdate_Click;
+        menuNetAccelSpike.Click += MenuNetAccelSpike_Click;
         btnNewUpdate.Click += MenuCheckUpdate_Click;
         menuBackupAndRestore.Click += MenuBackupAndRestore_Click;
 
@@ -315,6 +316,11 @@ public partial class MainWindow
     {
         StorageUI();
         ShowHideWindow(false);
+    }
+
+    private void MenuNetAccelSpike_Click(object sender, RoutedEventArgs e)
+    {
+        new ManagedSpikeWindow().Show();
     }
 
     private void MenuPromotion_Click(object sender, RoutedEventArgs e)

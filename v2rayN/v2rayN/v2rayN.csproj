@@ -36,6 +36,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\ServiceLib\ServiceLib.csproj" />
+		<ProjectReference Include="..\NetAccel.Managed\NetAccel.Managed.csproj" />
 	</ItemGroup>
 
 </Project>
