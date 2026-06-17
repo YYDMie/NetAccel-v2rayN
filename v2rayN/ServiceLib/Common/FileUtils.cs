@@ -87,6 +87,15 @@ public static class FileUtils
 
     public static bool ZipExtractToFile(string fileName, string toPath, string ignoredName)
     {
+        return ZipExtractToFile(fileName, toPath, ignoredName, null);
+    }
+
+    /// <summary>
+    /// Extracts a ZIP file to the target path. Supports both a simple ignoredName string filter
+    /// and an optional predicate for more complex exclusion logic (e.g., managed file exclusion).
+    /// </summary>
+    public static bool ZipExtractToFile(string fileName, string toPath, string ignoredName, Func<string, bool>? excludePredicate)
+    {
         try
         {
             using var archive = ZipFile.OpenRead(fileName);
@@ -99,6 +108,10 @@ public static class FileUtils
                 try
                 {
                     if (ignoredName.IsNotEmpty() && entry.Name.Contains(ignoredName))
+                    {
+                        continue;
+                    }
+                    if (excludePredicate != null && excludePredicate(entry.Name))
                     {
                         continue;
                     }

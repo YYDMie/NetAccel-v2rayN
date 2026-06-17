@@ -97,6 +97,7 @@ public class InnerFmt
 
     public static string? ToUri(List<ProfileItem> items)
     {
+        ManagedProfileGuard.EnsureNoneManaged(items, "InnerFmt.ToUri");
         var sb = new StringBuilder();
         foreach (var item in items)
         {

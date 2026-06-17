@@ -6,10 +6,11 @@ public sealed class AppManager
 
     private static readonly Lazy<AppManager> _instance = new(() => new());
     private Config _config;
+    private Config? _runtimeConfigOverride;
     private int? _statePort;
     private int? _statePort2;
     public static AppManager Instance => _instance.Value;
-    public Config Config => _config;
+    public Config Config => _runtimeConfigOverride ?? _config;
 
     public int StatePort
     {
@@ -118,11 +119,23 @@ public sealed class AppManager
         return true;
     }
 
+    public IDisposable PushRuntimeConfigOverride(Config config)
+    {
+        var previous = _runtimeConfigOverride;
+        _runtimeConfigOverride = config;
+        Reset();
+        return new RuntimeConfigOverrideScope(this, previous);
+    }
+
     public async Task AppExitAsync(bool needShutdown)
     {
         try
         {
             Logging.SaveLog("AppExitAsync Begin");
+
+            // Managed exit cleanup: stop managed connection, release ownership, clean TUN.
+            // Must run before classic cleanup to ensure proper teardown order.
+            await ManagedConnectionGuard.RunExitCleanupAsync();
 
             await SysProxyHandler.UpdateSysProxy(_config, true);
             AppEvents.AppExitRequested.Publish();
@@ -151,6 +164,18 @@ public sealed class AppManager
         AppEvents.ShutdownRequested.Publish(byUser);
     }
 
+    /// <summary>
+    /// Removes TUN devices. Exposed as public so that NetAccel.Managed can clean up
+    /// TUN state without depending on the internal WindowsUtils class.
+    /// </summary>
+    public async Task RemoveTunDeviceAsync()
+    {
+        if (Utils.IsWindows())
+        {
+            await WindowsUtils.RemoveTunDevice();
+        }
+    }
+
     public async Task RebootAsAdmin()
     {
         ProcUtils.RebootAsAdmin();
@@ -163,7 +188,7 @@ public sealed class AppManager
 
     public int GetLocalPort(EInboundProtocol protocol)
     {
-        var localPort = _config.Inbound.FirstOrDefault(t => t.Protocol == nameof(EInboundProtocol.socks))?.LocalPort ?? 10808;
+        var localPort = Config.Inbound.FirstOrDefault(t => t.Protocol == nameof(EInboundProtocol.socks))?.LocalPort ?? 10808;
         return localPort + (int)protocol;
     }
 
@@ -659,9 +684,34 @@ public sealed class AppManager
             return (ECoreType)profileItem.CoreType;
         }
 
-        var item = _config.CoreTypeItem?.FirstOrDefault(it => it.ConfigType == eConfigType);
+        var item = Config.CoreTypeItem?.FirstOrDefault(it => it.ConfigType == eConfigType);
         return item?.CoreType ?? ECoreType.Xray;
     }
 
     #endregion Core Type
+
+    private sealed class RuntimeConfigOverrideScope : IDisposable
+    {
+        private readonly AppManager _manager;
+        private readonly Config? _previous;
+        private bool _disposed;
+
+        public RuntimeConfigOverrideScope(AppManager manager, Config? previous)
+        {
+            _manager = manager;
+            _previous = previous;
+        }
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _manager._runtimeConfigOverride = _previous;
+            _manager.Reset();
+            _disposed = true;
+        }
+    }
 }

@@ -8,6 +8,11 @@ public class FmtHandler
     {
         try
         {
+            if (ManagedProfileGuard.IsManaged(item))
+            {
+                return null;
+            }
+
             var url = item.ConfigType switch
             {
                 EConfigType.VMess => VmessFmt.ToUri(item),

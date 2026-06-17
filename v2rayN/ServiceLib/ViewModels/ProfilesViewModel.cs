@@ -482,6 +482,11 @@ public class ProfilesViewModel : MyReactiveObject
         {
             return;
         }
+        if (ManagedProfileGuard.IsManaged(SelectedProfile.IndexId))
+        {
+            NoticeManager.Instance.Enqueue("托管线路不支持编辑");
+            return;
+        }
         var item = await AppManager.Instance.GetProfileItem(SelectedProfile.IndexId);
         if (item is null)
         {
@@ -518,6 +523,11 @@ public class ProfilesViewModel : MyReactiveObject
         var lstSelected = await GetProfileItems(true);
         if (lstSelected == null)
         {
+            return;
+        }
+        if (lstSelected.Any(t => ManagedProfileGuard.IsManaged(t)))
+        {
+            NoticeManager.Instance.Enqueue("托管线路不支持删除");
             return;
         }
         if (await _updateView?.Invoke(EViewAction.ShowYesNo, null) == false)
@@ -562,6 +572,11 @@ public class ProfilesViewModel : MyReactiveObject
         {
             return;
         }
+        if (lstSelected.Any(t => ManagedProfileGuard.IsManaged(t)))
+        {
+            NoticeManager.Instance.Enqueue("托管线路不支持复制");
+            return;
+        }
         if (await ConfigHandler.CopyServer(_config, lstSelected) == 0)
         {
             await RefreshServers();
@@ -604,6 +619,11 @@ public class ProfilesViewModel : MyReactiveObject
 
     public async Task ShareServerAsync()
     {
+        if (ManagedProfileGuard.IsManaged(SelectedProfile?.IndexId))
+        {
+            NoticeManager.Instance.Enqueue("托管线路不支持分享");
+            return;
+        }
         var item = await AppManager.Instance.GetProfileItem(SelectedProfile.IndexId);
         if (item is null)
         {
@@ -763,6 +783,11 @@ public class ProfilesViewModel : MyReactiveObject
 
     private async Task Export2ClientConfigAsync(bool blClipboard)
     {
+        if (ManagedProfileGuard.IsManaged(SelectedProfile?.IndexId))
+        {
+            NoticeManager.Instance.Enqueue("托管线路不支持导出");
+            return;
+        }
         var item = await AppManager.Instance.GetProfileItem(SelectedProfile.IndexId);
         if (item is null)
         {
@@ -801,6 +826,7 @@ public class ProfilesViewModel : MyReactiveObject
         {
             return;
         }
+        ManagedProfileGuard.EnsureNotManaged(item, "Export2ClientConfig");
         var (context, validatorResult) = await CoreConfigContextBuilder.Build(_config, item);
         if (NoticeManager.Instance.NotifyValidatorResult(validatorResult) && !validatorResult.Success)
         {
@@ -822,6 +848,11 @@ public class ProfilesViewModel : MyReactiveObject
         var lstSelected = await GetProfileItems(true);
         if (lstSelected == null)
         {
+            return;
+        }
+        if (lstSelected.Any(t => ManagedProfileGuard.IsManaged(t)))
+        {
+            NoticeManager.Instance.Enqueue("托管线路不支持导出");
             return;
         }
 
@@ -855,6 +886,11 @@ public class ProfilesViewModel : MyReactiveObject
         var lstSelected = await GetProfileItems(true);
         if (lstSelected == null)
         {
+            return;
+        }
+        if (lstSelected.Any(t => ManagedProfileGuard.IsManaged(t)))
+        {
+            NoticeManager.Instance.Enqueue("托管线路不支持导出");
             return;
         }
 

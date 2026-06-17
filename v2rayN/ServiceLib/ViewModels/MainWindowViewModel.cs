@@ -562,6 +562,13 @@ public class MainWindowViewModel : MyReactiveObject
 
         try
         {
+            // Owner guard: if managed connection owns the core, classic Reload must not start a second core.
+            if (!ManagedConnectionGuard.CanPerformClassicOperation())
+            {
+                NoticeManager.Instance.Enqueue("托管连接运行中，请先停止托管连接");
+                return;
+            }
+
             SetReloadEnabled(false);
 
             var profileItem = await ConfigHandler.GetDefaultServer(_config);

@@ -321,6 +321,7 @@ public static class ConfigHandler
     /// <returns>0 if successful</returns>
     public static async Task<int> RemoveServers(Config config, List<ProfileItem> indexes)
     {
+        ManagedProfileGuard.EnsureNoneManaged(indexes, "RemoveServers");
         var subid = "TempRemoveSubId";
         foreach (var item in indexes)
         {
@@ -342,6 +343,7 @@ public static class ConfigHandler
     /// <returns>0 if successful</returns>
     public static async Task<int> CopyServer(Config config, List<ProfileItem> indexes)
     {
+        ManagedProfileGuard.EnsureNoneManaged(indexes, "CopyServer");
         foreach (var it in indexes)
         {
             var item = await AppManager.Instance.GetProfileItem(it.IndexId);
@@ -1095,6 +1097,7 @@ public static class ConfigHandler
     /// <returns>0 if successful</returns>
     public static async Task<int> AddServerCommon(Config config, ProfileItem profileItem, bool toFile = true)
     {
+        ManagedProfileGuard.EnsureNotManaged(profileItem, "AddServerCommon");
         profileItem.ConfigVersion = 4;
 
         if (profileItem.StreamSecurity.IsNotEmpty())

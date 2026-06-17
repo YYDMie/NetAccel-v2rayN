@@ -135,7 +135,11 @@ public class BackupAndRestoreViewModel : MyReactiveObject
             await SQLiteHelper.Instance.DisposeDbConnectionAsync();
 
             var toPath = Utils.GetConfigPath();
-            FileUtils.ZipExtractToFile(fileName, toPath, "");
+            // Restore with managed file exclusion — skip managed-* and netaccel-credential-* files
+            ZipExtractToFileExcludingManaged(fileName, toPath);
+
+            // Post-restore cleanup: remove managed entries from restored SQLite database
+            await ManagedConnectionGuard.RunPostRestoreCleanupAsync(toPath);
 
             if (Utils.IsWindows())
             {
@@ -168,8 +172,55 @@ public class BackupAndRestoreViewModel : MyReactiveObject
         var configDirTemp = Path.Combine(configDirZipTemp, _guiConfigs);
 
         FileUtils.CopyDirectory(configDir, configDirTemp, false, true, "");
+
+        // Remove managed-specific files from the backup staging directory
+        RemoveManagedFilesFromDirectory(configDirTemp);
+
         var ret = FileUtils.CreateFromDirectory(configDirZipTemp, fileName);
         Directory.Delete(configDirZipTemp, true);
         return await Task.FromResult(ret);
+    }
+
+    /// <summary>
+    /// Removes managed-specific files from a directory before creating a backup ZIP.
+    /// </summary>
+    private static void RemoveManagedFilesFromDirectory(string dir)
+    {
+        try
+        {
+            if (!Directory.Exists(dir))
+            {
+                return;
+            }
+            foreach (var file in Directory.GetFiles(dir))
+            {
+                var fileName = Path.GetFileName(file);
+                if (ManagedExitCleanupFileFilter(fileName))
+                {
+                    File.Delete(file);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog("BackupAndRestoreViewModel: managed file removal error", ex);
+        }
+    }
+
+    /// <summary>
+    /// Returns true if the file should be excluded from backup (managed-specific).
+    /// </summary>
+    private static bool ManagedExitCleanupFileFilter(string fileName)
+    {
+        return fileName.StartsWith("managed-", StringComparison.OrdinalIgnoreCase)
+            || fileName.StartsWith("netaccel-credential-", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Extracts a ZIP file to the target path, skipping managed-specific files.
+    /// </summary>
+    private static void ZipExtractToFileExcludingManaged(string fileName, string toPath)
+    {
+        FileUtils.ZipExtractToFile(fileName, toPath, "", ManagedExitCleanupFileFilter);
     }
 }

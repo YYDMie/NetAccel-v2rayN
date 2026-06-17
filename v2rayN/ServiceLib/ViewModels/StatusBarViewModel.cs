@@ -383,6 +383,12 @@ public class StatusBarViewModel : MyReactiveObject
         {
             return;
         }
+        // Owner guard: managed connection controls its own proxy settings.
+        if (!ManagedConnectionGuard.CanPerformClassicOperation())
+        {
+            NoticeManager.Instance.Enqueue("托管连接运行中，请先停止托管连接");
+            return;
+        }
         _config.SystemProxyItem.SysProxyType = type;
         await ChangeSystemProxyAsync(type, true);
         NoticeManager.Instance.SendMessageEx($"{ResUI.TipChangeSystemProxy} - {_config.SystemProxyItem.SysProxyType}");
@@ -465,6 +471,13 @@ public class StatusBarViewModel : MyReactiveObject
     {
         if (_config.TunModeItem.EnableTun == EnableTun)
         {
+            return;
+        }
+        // Owner guard: managed connection controls its own TUN settings.
+        if (!ManagedConnectionGuard.CanPerformClassicOperation())
+        {
+            NoticeManager.Instance.Enqueue("托管连接运行中，请先停止托管连接");
+            EnableTun = false;
             return;
         }
 
