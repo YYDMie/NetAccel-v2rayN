@@ -1,0 +1,89 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        NetAccel Application Icon — "Shield + Lightning" vector resource.
+
+        Usage:
+            <Image Source="{DynamicResource NetAccelIcon}" Width="32" Height="32" />
+            <Image Source="{DynamicResource NetAccelIconSmall}" Width="16" Height="16" />
+
+        The icon is a DrawingImage that scales cleanly to any size.
+        Shield shape uses the ManagedColorPrimary500 (#2AAE82) green.
+        Lightning bolt is white on the filled shield variant.
+    -->
+
+    <!-- Full vector icon as a DrawingImage -->
+    <DrawingImage x:Key="NetAccelIcon">
+        <DrawingImage.Drawing>
+            <DrawingGroup>
+                <!-- Shield outline (primary green stroke) -->
+                <GeometryDrawing
+                    Brush="{DynamicResource ManagedBrushPrimary500}"
+                    Geometry="M 16,2
+                              C 16,2 8,2 6,4
+                              C 4,6 3,9 3,12
+                              C 3,16 5,22 10,26
+                              C 12,27.5 14,28.5 16,29
+                              C 18,28.5 20,27.5 22,26
+                              C 27,22 29,16 29,12
+                              C 29,9 28,6 26,4
+                              C 24,2 16,2 16,2 Z" />
+                <!-- Inner shield highlight (lighter green for depth) -->
+                <GeometryDrawing
+                    Brush="{DynamicResource ManagedBrushPrimary600}"
+                    Geometry="M 16,5
+                              C 16,5 10,5 8.5,6.5
+                              C 7,8 6,10.5 6,13
+                              C 6,16.5 7.5,21 11.5,24.5
+                              C 13,25.5 14.5,26.5 16,27
+                              C 17.5,26.5 19,25.5 20.5,24.5
+                              C 24.5,21 26,16.5 26,13
+                              C 26,10.5 25,8 23.5,6.5
+                              C 22,5 16,5 16,5 Z" />
+                <!-- Lightning bolt (white, centered) -->
+                <GeometryDrawing
+                    Brush="#FFFFFFFF"
+                    Geometry="M 18.5,7
+                              L 13,15.5
+                              L 16.5,15.5
+                              L 13.5,25
+                              L 21,15
+                              L 17.5,15
+                              L 20.5,7
+                              Z" />
+            </DrawingGroup>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+
+    <!-- Simplified outline-only icon for small sizes (16px tray) -->
+    <DrawingImage x:Key="NetAccelIconSmall">
+        <DrawingImage.Drawing>
+            <DrawingGroup>
+                <GeometryDrawing
+                    Brush="{DynamicResource ManagedBrushPrimary500}"
+                    Geometry="M 16,2
+                              C 16,2 8,2 6,4
+                              C 4,6 3,9 3,12
+                              C 3,16 5,22 10,26
+                              C 12,27.5 14,28.5 16,29
+                              C 18,28.5 20,27.5 22,26
+                              C 27,22 29,16 29,12
+                              C 29,9 28,6 26,4
+                              C 24,2 16,2 16,2 Z" />
+                <GeometryDrawing
+                    Brush="#FFFFFFFF"
+                    Geometry="M 18.5,8
+                              L 14,15
+                              L 17,15
+                              L 14,24
+                              L 20,15.5
+                              L 17.5,15.5
+                              L 19.5,8
+                              Z" />
+            </DrawingGroup>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+
+</ResourceDictionary>

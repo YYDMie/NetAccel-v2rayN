@@ -205,6 +205,7 @@
         <Setter Property="BorderBrush" Value="{DynamicResource ManagedBrushPrimary100}" />
         <Setter Property="BorderThickness" Value="5" />
         <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="IsAnimationEnabled" Value="{DynamicResource ManagedAnimationsEnabled}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type controls:ConnectOrb}">
@@ -241,9 +242,13 @@
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="OrbSurface" Property="Fill" Value="{DynamicResource ManagedBrushBgBubbleHover}" />
                         </Trigger>
-                        <Trigger Property="State" Value="Starting">
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="State" Value="Starting" />
+                                <Condition Property="IsAnimationEnabled" Value="True" />
+                            </MultiTrigger.Conditions>
                             <Setter TargetName="PulseRing" Property="Opacity" Value="0.55" />
-                            <Trigger.EnterActions>
+                            <MultiTrigger.EnterActions>
                                 <BeginStoryboard>
                                     <Storyboard RepeatBehavior="Forever" AutoReverse="True">
                                         <DoubleAnimation
@@ -254,8 +259,8 @@
                                             Duration="0:0:1.2" />
                                     </Storyboard>
                                 </BeginStoryboard>
-                            </Trigger.EnterActions>
-                        </Trigger>
+                            </MultiTrigger.EnterActions>
+                        </MultiTrigger>
                         <Trigger Property="State" Value="Connected">
                             <Setter TargetName="OrbSurface" Property="Fill" Value="{DynamicResource ManagedBrushPrimary500}" />
                             <Setter TargetName="OrbSurface" Property="Stroke" Value="{DynamicResource ManagedBrushPrimary500}" />

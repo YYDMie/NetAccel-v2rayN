@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Windows.Input;
 using H.NotifyIcon.Core;
 using NetAccel.Managed.Presentation;
 using NetAccel.Managed.Runtime;
@@ -7,6 +8,7 @@ using ServiceLib.Manager;
 using System.Windows.Controls;
 using System.Windows.Media.Imaging;
 using v2rayN.Managed.Controls;
+using v2rayN.Managed.Helpers;
 using v2rayN.Managed.Services;
 using v2rayN.Managed.ViewModels;
 using v2rayN.Views;
@@ -50,6 +52,7 @@ public partial class ManagedShellWindow : Window
         _runtime.TrayViewModel.PropertyChanged += TrayViewModel_PropertyChanged;
         Loaded += ManagedShellWindow_Loaded;
         Closing += ManagedShellWindow_Closing;
+        PreviewKeyDown += ManagedShellWindow_PreviewKeyDown;
         Application.Current.SessionEnding += Current_SessionEnding;
         ManagedClassicModeBridge.ReturnToManagedAsync = ReturnToManagedAsync;
         CurrentVersionStatus.Value = Utils.GetVersionInfo();
@@ -78,6 +81,7 @@ public partial class ManagedShellWindow : Window
         _runtime.HomeViewModel.PropertyChanged -= HomeViewModel_PropertyChanged;
         _runtime.TrayViewModel.PropertyChanged -= TrayViewModel_PropertyChanged;
         Application.Current.SessionEnding -= Current_SessionEnding;
+        PreviewKeyDown -= ManagedShellWindow_PreviewKeyDown;
         ManagedClassicModeBridge.ReturnToManagedAsync = null;
         ManagedTray.Dispose();
         _runtime.Dispose();
@@ -372,6 +376,13 @@ public partial class ManagedShellWindow : Window
         ShellContent.Visibility = isReady ? Visibility.Visible : Visibility.Collapsed;
         ShellStatus.Text = isReady ? "设备已就绪" : "需要登录";
         ShellStatus.Tone = isReady ? StatusTone.Success : StatusTone.Info;
+        AutomationHelper.AnnounceStatus(ShellStatus, ShellStatus.Text, raiseLiveRegion: true);
+
+        // Set focus to login form on startup when not yet ready
+        if (!isReady)
+        {
+            AutomationHelper.SetFocusOnDispatcher(LoginView);
+        }
 
         if (isReady)
         {
@@ -449,6 +460,10 @@ public partial class ManagedShellWindow : Window
             ? state
             : ConnectOrbState.Idle;
 
+        // Update ConnectOrb automation name to reflect current state
+        var orbDescription = AutomationHelper.GetOrbStateDescription(_runtime.HomeViewModel.OrbState);
+        AutomationHelper.AnnounceStatus(ConnectionOrb, $"一键加速, {orbDescription}", raiseLiveRegion: false);
+
         ShellStatus.Text = _runtime.HomeViewModel.StatusText;
         ShellStatus.Tone = _runtime.HomeViewModel.Stage switch
         {
@@ -457,6 +472,10 @@ public partial class ManagedShellWindow : Window
             ManagedHomeStage.NeedsPermission or ManagedHomeStage.ClassicRunning => StatusTone.Warning,
             _ => StatusTone.Info,
         };
+
+        // Announce status change via live region
+        AutomationHelper.AnnounceStatus(ShellStatus, _runtime.HomeViewModel.StatusText, raiseLiveRegion: true);
+
         _runtime.TrayViewModel.SetRouteName(_runtime.HomeViewModel.RouteName);
     }
 
@@ -589,6 +608,52 @@ public partial class ManagedShellWindow : Window
         }
 
         _lastTrayMode = tray.Mode;
+    }
+
+    private void ManagedShellWindow_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        // Ctrl+Tab / Ctrl+Shift+Tab: cycle through sections
+        if (e.Key is Key.Tab && Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+        {
+            var sections = new[]
+            {
+                HomeNavigation,
+                RoutesNavigation,
+                ActivityNavigation,
+                SettingsNavigation,
+                DiagnosticsNavigation,
+            };
+
+            var currentIndex = Array.FindIndex(sections, n => n.IsChecked == true);
+            if (currentIndex < 0)
+            {
+                currentIndex = 0;
+            }
+
+            int nextIndex;
+            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+            {
+                nextIndex = (currentIndex - 1 + sections.Length) % sections.Length;
+            }
+            else
+            {
+                nextIndex = (currentIndex + 1) % sections.Length;
+            }
+
+            sections[nextIndex].IsChecked = true;
+            sections[nextIndex].Focus();
+            e.Handled = true;
+            return;
+        }
+
+        // Escape: minimize to tray (if MinimizeToTray is enabled)
+        if (e.Key is Key.Escape
+            && ShellContent.Visibility == Visibility.Visible
+            && _runtime.SettingsViewModel.MinimizeToTray)
+        {
+            Hide();
+            e.Handled = true;
+        }
     }
 
     private async void ManagedShellWindow_Closing(object? sender, CancelEventArgs e)

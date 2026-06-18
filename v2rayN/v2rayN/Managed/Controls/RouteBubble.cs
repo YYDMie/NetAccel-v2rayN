@@ -1,9 +1,16 @@
+using System.Windows;
+using System.Windows.Automation;
+using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 
 namespace v2rayN.Managed.Controls;
 
 public sealed class RouteBubble : Button
 {
+    protected override AutomationPeer OnCreateAutomationPeer()
+    {
+        return new RouteBubbleAutomationPeer(this);
+    }
     public static readonly DependencyProperty DisplayNameProperty = DependencyProperty.Register(
         nameof(DisplayName),
         typeof(string),
@@ -62,5 +69,47 @@ public sealed class RouteBubble : Button
     {
         get => (bool)GetValue(IsRecommendedProperty);
         set => SetValue(IsRecommendedProperty, value);
+    }
+}
+
+internal sealed class RouteBubbleAutomationPeer : ButtonAutomationPeer
+{
+    private readonly RouteBubble _owner;
+
+    public RouteBubbleAutomationPeer(RouteBubble owner)
+        : base(owner)
+    {
+        _owner = owner;
+    }
+
+    protected override string GetNameCore()
+    {
+        var name = GetAutomationName();
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            return name;
+        }
+
+        // Compose: "DisplayName, Region, StatusText" for screen readers
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(_owner.DisplayName))
+        {
+            parts.Add(_owner.DisplayName);
+        }
+        if (!string.IsNullOrWhiteSpace(_owner.Region))
+        {
+            parts.Add(_owner.Region);
+        }
+        if (!string.IsNullOrWhiteSpace(_owner.StatusText))
+        {
+            parts.Add(_owner.StatusText);
+        }
+
+        return parts.Count > 0 ? string.Join(", ", parts) : base.GetNameCore();
+    }
+
+    private string? GetAutomationName()
+    {
+        return (string?)_owner.GetValue(AutomationProperties.NameProperty);
     }
 }

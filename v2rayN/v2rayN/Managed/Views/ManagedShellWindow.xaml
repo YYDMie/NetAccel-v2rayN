@@ -13,9 +13,12 @@
     Height="620"
     MinWidth="720"
     MinHeight="560"
+    AutomationProperties.Name="NetAccel 加速客户端"
     Background="{DynamicResource ManagedBrushBgCanvas}"
     FontFamily="{DynamicResource ManagedFontFamily}"
     Icon="/Resources/v2rayN.ico"
+    IsTabStop="True"
+    KeyboardNavigation.TabNavigation="Cycle"
     TextOptions.TextFormattingMode="Display"
     TextOptions.TextRenderingMode="ClearType"
     WindowStartupLocation="CenterScreen"
@@ -37,19 +40,21 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <StackPanel VerticalAlignment="Center" Orientation="Horizontal">
+                <StackPanel
+                    VerticalAlignment="Center"
+                    AutomationProperties.Name="NetAccel 标识"
+                    Orientation="Horizontal">
                     <Border
                         Width="34"
                         Height="34"
                         Background="{DynamicResource ManagedBrushPrimary100}"
                         CornerRadius="{DynamicResource ManagedRadiusMedium}">
-                        <materialDesign:PackIcon
-                            Width="20"
-                            Height="20"
+                        <Image
+                            Width="22"
+                            Height="22"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
-                            Foreground="{DynamicResource ManagedBrushPrimary600}"
-                            Kind="ShieldCheckOutline" />
+                            Source="{DynamicResource NetAccelIcon}" />
                     </Border>
                     <TextBlock
                         Margin="10,0,0,0"
@@ -63,6 +68,7 @@
                     x:Name="ShellStatus"
                     Grid.Column="1"
                     VerticalAlignment="Center"
+                    AutomationProperties.LiveSetting="Polite"
                     Text="正在准备"
                     Tone="Info" />
             </Grid>
@@ -86,8 +92,11 @@
                 <DockPanel LastChildFill="False">
                     <RadioButton
                         x:Name="DiagnosticsNavigation"
+                        TabIndex="4"
+                        AutomationProperties.Name="诊断导航"
                         DockPanel.Dock="Bottom"
                         GroupName="ManagedNavigation"
+                        IsTabStop="True"
                         Style="{DynamicResource ManagedNavigationRadioStyle}"
                         Tag="Diagnostics">
                         <StackPanel Orientation="Horizontal">
@@ -99,8 +108,11 @@
                     <StackPanel DockPanel.Dock="Top">
                         <RadioButton
                             x:Name="HomeNavigation"
+                            TabIndex="0"
+                            AutomationProperties.Name="首页导航"
                             GroupName="ManagedNavigation"
                             IsChecked="True"
+                            IsTabStop="True"
                             Style="{DynamicResource ManagedNavigationRadioStyle}"
                             Tag="Home">
                             <StackPanel Orientation="Horizontal">
@@ -110,7 +122,10 @@
                         </RadioButton>
                         <RadioButton
                             x:Name="RoutesNavigation"
+                            TabIndex="1"
+                            AutomationProperties.Name="线路导航"
                             GroupName="ManagedNavigation"
+                            IsTabStop="True"
                             Style="{DynamicResource ManagedNavigationRadioStyle}"
                             Tag="Routes">
                             <StackPanel Orientation="Horizontal">
@@ -120,7 +135,10 @@
                         </RadioButton>
                         <RadioButton
                             x:Name="ActivityNavigation"
+                            TabIndex="2"
+                            AutomationProperties.Name="记录导航"
                             GroupName="ManagedNavigation"
+                            IsTabStop="True"
                             Style="{DynamicResource ManagedNavigationRadioStyle}"
                             Tag="Activity">
                             <StackPanel Orientation="Horizontal">
@@ -130,7 +148,10 @@
                         </RadioButton>
                         <RadioButton
                             x:Name="SettingsNavigation"
+                            TabIndex="3"
+                            AutomationProperties.Name="设置导航"
                             GroupName="ManagedNavigation"
+                            IsTabStop="True"
                             Style="{DynamicResource ManagedNavigationRadioStyle}"
                             Tag="Settings">
                             <StackPanel Orientation="Horizontal">
@@ -158,6 +179,7 @@
                     <StackPanel>
                         <TextBlock
                             x:Name="PageTitle"
+                            AutomationProperties.HeadingLevel="Level1"
                             Style="{DynamicResource ManagedPageTitleTextStyle}"
                             Text="首页" />
                         <TextBlock
@@ -177,6 +199,7 @@
                                     <controls:ConnectOrb
                                         x:Name="ConnectionOrb"
                                         AutomationProperties.Name="一键加速"
+                                        AutomationProperties.HelpText="按 Enter 或空格开始或停止网络加速"
                                         ActionText="{Binding ActionText}"
                                         Click="ConnectionOrb_Click"
                                         IsEnabled="{Binding IsActionEnabled}"
@@ -458,9 +481,19 @@
                                         AutomationProperties.Name="使用全局加速"
                                         Content="加速范围：全局加速"
                                         IsChecked="{Binding UseTun, Mode=TwoWay}" />
+                                    <TextBlock Style="{DynamicResource ManagedSecondaryTextStyle}" Text="主题" />
+                                    <ComboBox
+                                        Margin="0,6,0,12"
+                                        AutomationProperties.Name="主题"
+                                        SelectedValue="{Binding Theme, Mode=TwoWay}"
+                                        SelectedValuePath="Tag">
+                                        <ComboBoxItem Content="跟随系统" Tag="system" />
+                                        <ComboBoxItem Content="浅色" Tag="light" />
+                                        <ComboBoxItem Content="深色" Tag="dark" />
+                                    </ComboBox>
                                     <TextBlock
                                         Style="{DynamicResource ManagedSecondaryTextStyle}"
-                                        Text="主题：跟随系统　语言：简体中文" />
+                                        Text="语言：简体中文" />
                                     <controls:PillButton
                                         Margin="0,14,0,0"
                                         HorizontalAlignment="Left"
@@ -563,6 +596,7 @@
                                 Background="{DynamicResource ManagedBrushBgBubble}"
                                 CornerRadius="{DynamicResource ManagedRadiusMedium}">
                                 <TextBlock
+                                    AutomationProperties.LiveSetting="Polite"
                                     Style="{DynamicResource ManagedSecondaryTextStyle}"
                                     Text="{Binding Summary}"
                                     TextWrapping="Wrap" />
@@ -594,46 +628,55 @@
             ToolTipText="NetAccel"
             TrayMouseDoubleClick="ManagedTray_DoubleClick">
             <tb:TaskbarIcon.ContextMenu>
-                <ContextMenu>
+                <ContextMenu AutomationProperties.Name="NetAccel 托盘菜单">
                     <MenuItem
                         x:Name="TrayHeader"
+                        AutomationProperties.Name="状态标题"
                         Header="NetAccel · 未加速"
                         IsEnabled="False" />
                     <Separator />
                     <MenuItem
                         x:Name="TrayPrimaryAction"
+                        AutomationProperties.Name="一键加速"
                         Click="TrayPrimaryAction_Click"
                         Header="一键加速" />
                     <MenuItem
                         x:Name="TrayCurrentRoute"
+                        AutomationProperties.Name="当前线路"
                         Header="当前线路：智能通道"
                         IsEnabled="False"
                         Visibility="Collapsed" />
                     <Separator x:Name="TrayManagedSeparator" />
                     <MenuItem
                         x:Name="TrayOpenMain"
+                        AutomationProperties.Name="打开主界面"
                         Click="TrayOpenMain_Click"
                         Header="打开主界面" />
                     <MenuItem
                         x:Name="TrayDiagnostics"
+                        AutomationProperties.Name="一键诊断"
                         Click="TrayDiagnostics_Click"
                         Header="一键诊断" />
                     <MenuItem
                         x:Name="TraySettings"
+                        AutomationProperties.Name="设置"
                         Click="TraySettings_Click"
                         Header="设置" />
                     <MenuItem
                         x:Name="TrayStopClassic"
+                        AutomationProperties.Name="停止当前连接"
                         Click="TrayStopClassic_Click"
                         Header="停止当前连接"
                         Visibility="Collapsed" />
                     <MenuItem
                         x:Name="TrayReturnManaged"
+                        AutomationProperties.Name="返回托管首页"
                         Click="TrayReturnManaged_Click"
                         Header="返回托管首页"
                         Visibility="Collapsed" />
                     <Separator />
                     <MenuItem
+                        AutomationProperties.Name="退出"
                         Click="TrayExit_Click"
                         Header="退出" />
                 </ContextMenu>

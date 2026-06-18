@@ -20,6 +20,7 @@ public sealed class ManagedSettingsViewModel : INotifyPropertyChanged
     private bool _minimizeToTray = true;
     private bool _notificationsEnabled = true;
     private bool _useTun;
+    private string _theme = "system";
     private bool _isBusy;
     private string _accountText = "当前账号";
     private string _lastSyncText = "尚未同步";
@@ -82,6 +83,11 @@ public sealed class ManagedSettingsViewModel : INotifyPropertyChanged
     }
 
     public string AccelerationScopeText => UseTun ? "全局加速" : "智能加速";
+    public string Theme
+    {
+        get => _theme;
+        set => SetProperty(ref _theme, NormalizeTheme(value));
+    }
     public string AccountText
     {
         get => _accountText;
@@ -123,6 +129,7 @@ public sealed class ManagedSettingsViewModel : INotifyPropertyChanged
         MinimizeToTray = preferences.MinimizeToTray;
         NotificationsEnabled = preferences.NotificationsEnabled;
         UseTun = string.Equals(preferences.PreferredNetworkMode, "tun", StringComparison.Ordinal);
+        Theme = preferences.Theme;
         var accountId = await _accountIdProvider(ct);
         AccountText = accountId is > 0 ? $"账号 #{accountId}" : "当前账号";
     }
@@ -262,6 +269,15 @@ public sealed class ManagedSettingsViewModel : INotifyPropertyChanged
             MinimizeToTray = MinimizeToTray,
             NotificationsEnabled = NotificationsEnabled,
             PreferredNetworkMode = UseTun ? "tun" : "system_proxy",
+            Theme = Theme,
+        };
+
+    private static string NormalizeTheme(string? theme)
+        => theme?.Trim().ToLowerInvariant() switch
+        {
+            "light" => "light",
+            "dark" => "dark",
+            _ => "system",
         };
 
     private async Task<bool> TryEnterAsync(CancellationToken ct)

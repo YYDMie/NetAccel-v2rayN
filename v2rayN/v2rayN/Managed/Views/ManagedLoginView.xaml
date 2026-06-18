@@ -9,6 +9,7 @@
     d:DesignHeight="548"
     d:DesignWidth="672"
     Background="{DynamicResource ManagedBrushBgCanvas}"
+    KeyboardNavigation.TabNavigation="Cycle"
     mc:Ignorable="d">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="ManagedBooleanToVisibilityConverter" />
@@ -55,16 +56,20 @@
                     <TextBlock Style="{DynamicResource ManagedSecondaryTextStyle}" Text="账号" />
                     <TextBox
                         x:Name="UsernameTextBox"
+                        TabIndex="0"
                         Margin="0,6,0,14"
                         AutomationProperties.Name="账号"
+                        AutomationProperties.HelpText="输入您的登录账号"
                         Style="{DynamicResource ManagedTextBoxStyle}"
                         Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}" />
 
                     <TextBlock Style="{DynamicResource ManagedSecondaryTextStyle}" Text="密码" />
                     <PasswordBox
                         x:Name="PasswordInput"
+                        TabIndex="1"
                         Margin="0,6,0,0"
                         AutomationProperties.Name="密码"
+                        AutomationProperties.HelpText="输入密码后按 Enter 提交"
                         Style="{DynamicResource ManagedPasswordBoxStyle}" />
                 </StackPanel>
 
@@ -77,6 +82,7 @@
 
                 <Button
                     x:Name="PrimaryAction"
+                    TabIndex="2"
                     Margin="0,22,0,0"
                     AutomationProperties.Name="{Binding PrimaryActionText}"
                     Content="{Binding PrimaryActionText}"
@@ -86,6 +92,7 @@
 
                 <Button
                     x:Name="CancelAction"
+                    TabIndex="3"
                     Margin="0,12,0,0"
                     AutomationProperties.Name="取消"
                     Content="取消"
@@ -94,6 +101,7 @@
 
                 <Button
                     x:Name="ReturnToLoginAction"
+                    TabIndex="4"
                     Margin="0,12,0,0"
                     AutomationProperties.Name="退出账号"
                     Content="退出账号"

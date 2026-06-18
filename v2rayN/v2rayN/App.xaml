@@ -22,7 +22,9 @@
                 <ResourceDictionary Source="/Managed/Resources/Inputs.xaml" />
                 <ResourceDictionary Source="/Managed/Resources/Navigation.xaml" />
                 <ResourceDictionary Source="/Managed/Resources/Controls.xaml" />
+                <ResourceDictionary Source="/Managed/Resources/Accessibility.xaml" />
             </ResourceDictionary.MergedDictionaries>
+            <system:Boolean x:Key="ManagedAnimationsEnabled">True</system:Boolean>
             <system:Double x:Key="MenuItemHeight">32</system:Double>
             <system:Double x:Key="StdFontSize">12</system:Double>
             <system:Double x:Key="StdFontSize1">13</system:Double>

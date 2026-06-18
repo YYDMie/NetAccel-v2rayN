@@ -8,6 +8,7 @@ public sealed record ManagedPreferences
     public bool MinimizeToTray { get; init; } = true;
     public bool NotificationsEnabled { get; init; } = true;
     public string PreferredNetworkMode { get; init; } = "system_proxy";
+    public string Theme { get; init; } = "system";
 }
 
 public interface IManagedPreferencesStore

@@ -20,6 +20,7 @@ public class ManagedSettingsAndTrayTests
             MinimizeToTray = false,
             NotificationsEnabled = false,
             PreferredNetworkMode = "tun",
+            Theme = "dark",
         };
 
         await store.WriteAsync(expected, TestContext.Current.CancellationToken);
@@ -47,6 +48,7 @@ public class ManagedSettingsAndTrayTests
         Assert.True(preferences.MinimizeToTray);
         Assert.True(preferences.NotificationsEnabled);
         Assert.Equal("system_proxy", preferences.PreferredNetworkMode);
+        Assert.Equal("system", preferences.Theme);
     }
 
     [Fact]
@@ -68,6 +70,7 @@ public class ManagedSettingsAndTrayTests
         viewModel.MinimizeToTray = false;
         viewModel.NotificationsEnabled = false;
         viewModel.UseTun = true;
+        viewModel.Theme = "dark";
 
         await viewModel.SaveAsync(TestContext.Current.CancellationToken);
 
@@ -79,6 +82,7 @@ public class ManagedSettingsAndTrayTests
                 MinimizeToTray = false,
                 NotificationsEnabled = false,
                 PreferredNetworkMode = "tun",
+                Theme = "dark",
             },
             store.Value);
         Assert.Equal("设置已保存。", viewModel.Summary);
