@@ -23,11 +23,26 @@ public partial class ManagedLoginView : UserControl
         DataContext = viewModel;
     }
 
+    public void FocusInitialField()
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (_viewModel?.IsLoginFormVisible == true)
+            {
+                UsernameTextBox.Focus();
+            }
+            else if (PrimaryAction.IsVisible && PrimaryAction.IsEnabled)
+            {
+                PrimaryAction.Focus();
+            }
+        }, System.Windows.Threading.DispatcherPriority.Input);
+    }
+
     private void ManagedLoginView_Loaded(object sender, RoutedEventArgs e)
     {
         if (_viewModel?.IsLoginFormVisible == true)
         {
-            UsernameTextBox.Focus();
+            FocusInitialField();
         }
     }
 

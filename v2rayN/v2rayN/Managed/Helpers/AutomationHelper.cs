@@ -1,6 +1,5 @@
 using System.Windows.Automation;
 using System.Windows.Automation.Peers;
-using System.Windows.Automation.Provider;
 using System.Windows.Controls;
 
 namespace v2rayN.Managed.Helpers;
@@ -49,23 +48,10 @@ public static class AutomationHelper
     /// </summary>
     public static void RaiseLiveRegionChanged(FrameworkElement element, string newText)
     {
-        if (element == null)
-        {
-            return;
-        }
-
-        var peer = UIElementAutomationPeer.CreatePeerForElement(element);
-        if (peer is IValueProvider valueProvider)
-        {
-            try
-            {
-                valueProvider.SetValue(newText);
-            }
-            catch (InvalidOperationException)
-            {
-                // Some elements do not support IValueProvider; fall through silently.
-            }
-        }
+        AutomationProperties.SetName(element, newText);
+        var peer = UIElementAutomationPeer.CreatePeerForElement(element)
+                   ?? new FrameworkElementAutomationPeer(element);
+        peer.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
     }
 
     /// <summary>

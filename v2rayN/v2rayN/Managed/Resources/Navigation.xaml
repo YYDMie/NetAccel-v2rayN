@@ -11,6 +11,7 @@
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource ManagedButtonFocusVisualStyle}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type RadioButton}">
@@ -29,7 +30,7 @@
                         </Trigger>
                         <Trigger Property="IsChecked" Value="True">
                             <Setter TargetName="NavigationBorder" Property="Background" Value="{DynamicResource ManagedBrushPrimary100}" />
-                            <Setter Property="Foreground" Value="{DynamicResource ManagedBrushPrimary600}" />
+                            <Setter Property="Foreground" Value="{DynamicResource ManagedBrushSecondaryButtonText}" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
                             <Setter TargetName="NavigationBorder" Property="BorderBrush" Value="{DynamicResource ManagedBrushInfo}" />

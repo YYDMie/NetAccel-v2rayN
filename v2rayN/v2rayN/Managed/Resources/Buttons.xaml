@@ -4,10 +4,11 @@
     <Style x:Key="ManagedPillButtonStyle" TargetType="{x:Type Button}">
         <Setter Property="MinHeight" Value="40" />
         <Setter Property="Padding" Value="{DynamicResource ManagedControlPadding}" />
-        <Setter Property="Background" Value="{DynamicResource ManagedBrushPrimary500}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource ManagedBrushPrimary500}" />
+        <Setter Property="Background" Value="{DynamicResource ManagedBrushPrimaryButton}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ManagedBrushPrimaryButton}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Foreground" Value="White" />
+        <Setter Property="Foreground" Value="{DynamicResource ManagedBrushPrimaryButtonText}" />
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource ManagedButtonFocusVisualStyle}" />
         <Setter Property="FontFamily" Value="{DynamicResource ManagedFontFamily}" />
         <Setter Property="FontSize" Value="15" />
         <Setter Property="FontWeight" Value="SemiBold" />
@@ -31,8 +32,8 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource ManagedBrushPrimary600}" />
-                            <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="{DynamicResource ManagedBrushPrimary600}" />
+                            <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource ManagedBrushPrimaryButtonHover}" />
+                            <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="{DynamicResource ManagedBrushPrimaryButtonHover}" />
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="ButtonBorder" Property="Opacity" Value="0.86" />
@@ -59,6 +60,6 @@
         TargetType="{x:Type Button}">
         <Setter Property="Background" Value="{DynamicResource ManagedBrushPrimary100}" />
         <Setter Property="BorderBrush" Value="{DynamicResource ManagedBrushPrimary100}" />
-        <Setter Property="Foreground" Value="{DynamicResource ManagedBrushPrimary600}" />
+        <Setter Property="Foreground" Value="{DynamicResource ManagedBrushSecondaryButtonText}" />
     </Style>
 </ResourceDictionary>

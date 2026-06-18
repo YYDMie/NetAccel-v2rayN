@@ -21,6 +21,10 @@
     <Color x:Key="ManagedColorDangerSurface">#4A2929</Color>
     <Color x:Key="ManagedColorInfoSurface">#253B55</Color>
     <Color x:Key="ManagedColorFocusIndicator">#4BC49A</Color>
+    <Color x:Key="ManagedColorPrimaryButton">#4BC49A</Color>
+    <Color x:Key="ManagedColorPrimaryButtonHover">#78D9B7</Color>
+    <Color x:Key="ManagedColorPrimaryButtonText">#101613</Color>
+    <Color x:Key="ManagedColorSecondaryButtonText">#78D9B7</Color>
     <Color x:Key="ManagedColorOverlay">#CC101613</Color>
     <Color x:Key="ManagedColorShadow">#40000000</Color>
 
@@ -44,6 +48,10 @@
     <SolidColorBrush x:Key="ManagedBrushDangerSurface" Color="{StaticResource ManagedColorDangerSurface}" />
     <SolidColorBrush x:Key="ManagedBrushInfoSurface" Color="{StaticResource ManagedColorInfoSurface}" />
     <SolidColorBrush x:Key="ManagedBrushFocusIndicator" Color="{StaticResource ManagedColorFocusIndicator}" />
+    <SolidColorBrush x:Key="ManagedBrushPrimaryButton" Color="{StaticResource ManagedColorPrimaryButton}" />
+    <SolidColorBrush x:Key="ManagedBrushPrimaryButtonHover" Color="{StaticResource ManagedColorPrimaryButtonHover}" />
+    <SolidColorBrush x:Key="ManagedBrushPrimaryButtonText" Color="{StaticResource ManagedColorPrimaryButtonText}" />
+    <SolidColorBrush x:Key="ManagedBrushSecondaryButtonText" Color="{StaticResource ManagedColorSecondaryButtonText}" />
     <SolidColorBrush x:Key="ManagedBrushOverlay" Color="{StaticResource ManagedColorOverlay}" />
     <SolidColorBrush x:Key="ManagedBrushShadow" Color="{StaticResource ManagedColorShadow}" />
 </ResourceDictionary>

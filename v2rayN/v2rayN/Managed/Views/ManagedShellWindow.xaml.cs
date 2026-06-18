@@ -1,5 +1,7 @@
 using System.ComponentModel;
+using System.Windows.Automation;
 using System.Windows.Input;
+using System.Windows.Media;
 using H.NotifyIcon.Core;
 using NetAccel.Managed.Presentation;
 using NetAccel.Managed.Runtime;
@@ -18,6 +20,7 @@ namespace v2rayN.Managed.Views;
 public partial class ManagedShellWindow : Window
 {
     private readonly ManagedClientRuntime _runtime;
+    private readonly ManagedThemeService _themeService;
     private bool _startupAttempted;
     private bool _homeInitialized;
     private bool _routesInitialized;
@@ -41,6 +44,8 @@ public partial class ManagedShellWindow : Window
     {
         _runtime = ManagedClientRuntime.Create();
         InitializeComponent();
+        _themeService = new ManagedThemeService(Application.Current);
+        ConfigureAccessibility();
         LoginView.AttachViewModel(_runtime.LoginViewModel);
         HomeSection.DataContext = _runtime.HomeViewModel;
         RoutesSection.DataContext = _runtime.RoutesViewModel;
@@ -50,6 +55,7 @@ public partial class ManagedShellWindow : Window
         _runtime.LoginViewModel.PropertyChanged += LoginViewModel_PropertyChanged;
         _runtime.HomeViewModel.PropertyChanged += HomeViewModel_PropertyChanged;
         _runtime.TrayViewModel.PropertyChanged += TrayViewModel_PropertyChanged;
+        _runtime.SettingsViewModel.PropertyChanged += SettingsViewModel_PropertyChanged;
         Loaded += ManagedShellWindow_Loaded;
         Closing += ManagedShellWindow_Closing;
         PreviewKeyDown += ManagedShellWindow_PreviewKeyDown;
@@ -75,15 +81,52 @@ public partial class ManagedShellWindow : Window
         UpdateTrayState();
     }
 
+    private void ConfigureAccessibility()
+    {
+        AdvancedSettingsExpander.Loaded += AdvancedSettingsExpander_Loaded;
+    }
+
+    private void AdvancedSettingsExpander_Loaded(object sender, RoutedEventArgs e)
+    {
+        AdvancedSettingsExpander.ApplyTemplate();
+        if (FindVisualDescendantByName(AdvancedSettingsExpander, "ExpanderButton") is FrameworkElement button)
+        {
+            AutomationProperties.SetName(button, "展开或收起高级设置");
+        }
+    }
+
+    private static FrameworkElement? FindVisualDescendantByName(DependencyObject root, string name)
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
+        {
+            var child = VisualTreeHelper.GetChild(root, index);
+            if (child is FrameworkElement element && string.Equals(element.Name, name, StringComparison.Ordinal))
+            {
+                return element;
+            }
+
+            var match = FindVisualDescendantByName(child, name);
+            if (match != null)
+            {
+                return match;
+            }
+        }
+
+        return null;
+    }
+
     protected override void OnClosed(EventArgs e)
     {
         _runtime.LoginViewModel.PropertyChanged -= LoginViewModel_PropertyChanged;
         _runtime.HomeViewModel.PropertyChanged -= HomeViewModel_PropertyChanged;
         _runtime.TrayViewModel.PropertyChanged -= TrayViewModel_PropertyChanged;
+        _runtime.SettingsViewModel.PropertyChanged -= SettingsViewModel_PropertyChanged;
+        AdvancedSettingsExpander.Loaded -= AdvancedSettingsExpander_Loaded;
         Application.Current.SessionEnding -= Current_SessionEnding;
         PreviewKeyDown -= ManagedShellWindow_PreviewKeyDown;
         ManagedClassicModeBridge.ReturnToManagedAsync = null;
         ManagedTray.Dispose();
+        _themeService.Dispose();
         _runtime.Dispose();
         base.OnClosed(e);
     }
@@ -180,6 +223,14 @@ public partial class ManagedShellWindow : Window
         if (e.PropertyName == nameof(ManagedHomeViewModel.RouteName))
         {
             _runtime.TrayViewModel.SetRouteName(_runtime.HomeViewModel.RouteName);
+        }
+    }
+
+    private void SettingsViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ManagedSettingsViewModel.Theme))
+        {
+            Dispatcher.InvokeAsync(() => _themeService.Apply(_runtime.SettingsViewModel.Theme, this));
         }
     }
 
@@ -381,7 +432,7 @@ public partial class ManagedShellWindow : Window
         // Set focus to login form on startup when not yet ready
         if (!isReady)
         {
-            AutomationHelper.SetFocusOnDispatcher(LoginView);
+            LoginView.FocusInitialField();
         }
 
         if (isReady)
@@ -488,6 +539,7 @@ public partial class ManagedShellWindow : Window
 
         _settingsInitialized = true;
         await _runtime.SettingsViewModel.InitializeAsync();
+        _themeService.Apply(_runtime.SettingsViewModel.Theme, this);
         _runtime.HomeViewModel.NetworkMode = _runtime.SettingsViewModel.UseTun
             ? ManagedConnectionMode.Tun
             : ManagedConnectionMode.SystemProxy;
@@ -591,7 +643,9 @@ public partial class ManagedShellWindow : Window
             _ => 1,
         };
         ManagedTray.IconSource = BitmapFrame.Create(
-            new Uri($"pack://application:,,,/Resources/NotifyIcon{iconIndex}.ico", UriKind.Absolute));
+            new Uri(
+                $"pack://application:,,,/NetAccel;component/Resources/NotifyIcon{iconIndex}.ico",
+                UriKind.Absolute));
 
         if (_settingsInitialized
             && _runtime.SettingsViewModel.NotificationsEnabled
@@ -612,8 +666,12 @@ public partial class ManagedShellWindow : Window
 
     private void ManagedShellWindow_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        // Ctrl+Tab / Ctrl+Shift+Tab: cycle through sections
-        if (e.Key is Key.Tab && Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+        e.Handled = TryHandleShellShortcut(e.Key, Keyboard.Modifiers);
+    }
+
+    internal bool TryHandleShellShortcut(Key key, ModifierKeys modifiers)
+    {
+        if (key is Key.Tab && modifiers.HasFlag(ModifierKeys.Control))
         {
             var sections = new[]
             {
@@ -631,7 +689,7 @@ public partial class ManagedShellWindow : Window
             }
 
             int nextIndex;
-            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+            if (modifiers.HasFlag(ModifierKeys.Shift))
             {
                 nextIndex = (currentIndex - 1 + sections.Length) % sections.Length;
             }
@@ -642,18 +700,18 @@ public partial class ManagedShellWindow : Window
 
             sections[nextIndex].IsChecked = true;
             sections[nextIndex].Focus();
-            e.Handled = true;
-            return;
+            return true;
         }
 
-        // Escape: minimize to tray (if MinimizeToTray is enabled)
-        if (e.Key is Key.Escape
+        if (key is Key.Escape
             && ShellContent.Visibility == Visibility.Visible
             && _runtime.SettingsViewModel.MinimizeToTray)
         {
             Hide();
-            e.Handled = true;
+            return true;
         }
+
+        return false;
     }
 
     private async void ManagedShellWindow_Closing(object? sender, CancelEventArgs e)

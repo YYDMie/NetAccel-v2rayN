@@ -12,15 +12,19 @@
     <Color x:Key="ManagedColorTextSecondary">#66736D</Color>
     <Color x:Key="ManagedColorTextDisabled">#A0AAA5</Color>
     <Color x:Key="ManagedColorBorderDefault">#DDE6E1</Color>
-    <Color x:Key="ManagedColorSuccess">#2A9D6F</Color>
-    <Color x:Key="ManagedColorWarning">#D4932F</Color>
-    <Color x:Key="ManagedColorDanger">#D85B5B</Color>
-    <Color x:Key="ManagedColorInfo">#4A86D4</Color>
+    <Color x:Key="ManagedColorSuccess">#1D7A55</Color>
+    <Color x:Key="ManagedColorWarning">#8A5A12</Color>
+    <Color x:Key="ManagedColorDanger">#B83E3E</Color>
+    <Color x:Key="ManagedColorInfo">#2F6AB8</Color>
     <Color x:Key="ManagedColorSuccessSurface">#E4F5ED</Color>
     <Color x:Key="ManagedColorWarningSurface">#FFF3DF</Color>
     <Color x:Key="ManagedColorDangerSurface">#FBE9E9</Color>
     <Color x:Key="ManagedColorInfoSurface">#EAF2FC</Color>
-    <Color x:Key="ManagedColorFocusIndicator">#2AAE82</Color>
+    <Color x:Key="ManagedColorFocusIndicator">#0E6B4D</Color>
+    <Color x:Key="ManagedColorPrimaryButton">#1B7A5C</Color>
+    <Color x:Key="ManagedColorPrimaryButtonHover">#145C45</Color>
+    <Color x:Key="ManagedColorPrimaryButtonText">#FFFFFF</Color>
+    <Color x:Key="ManagedColorSecondaryButtonText">#0E6B4D</Color>
     <Color x:Key="ManagedColorOverlay">#9917211D</Color>
     <Color x:Key="ManagedColorShadow">#1A000000</Color>
 
@@ -44,6 +48,10 @@
     <SolidColorBrush x:Key="ManagedBrushDangerSurface" Color="{StaticResource ManagedColorDangerSurface}" />
     <SolidColorBrush x:Key="ManagedBrushInfoSurface" Color="{StaticResource ManagedColorInfoSurface}" />
     <SolidColorBrush x:Key="ManagedBrushFocusIndicator" Color="{StaticResource ManagedColorFocusIndicator}" />
+    <SolidColorBrush x:Key="ManagedBrushPrimaryButton" Color="{StaticResource ManagedColorPrimaryButton}" />
+    <SolidColorBrush x:Key="ManagedBrushPrimaryButtonHover" Color="{StaticResource ManagedColorPrimaryButtonHover}" />
+    <SolidColorBrush x:Key="ManagedBrushPrimaryButtonText" Color="{StaticResource ManagedColorPrimaryButtonText}" />
+    <SolidColorBrush x:Key="ManagedBrushSecondaryButtonText" Color="{StaticResource ManagedColorSecondaryButtonText}" />
     <SolidColorBrush x:Key="ManagedBrushOverlay" Color="{StaticResource ManagedColorOverlay}" />
     <SolidColorBrush x:Key="ManagedBrushShadow" Color="{StaticResource ManagedColorShadow}" />
 </ResourceDictionary>

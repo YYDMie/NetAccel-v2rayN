@@ -12,7 +12,7 @@ Requirements:
 - Works at 16px (tray), 32px (taskbar), 48px, 256px (installer/exe)
 - Matches the green/teal color scheme: primary #2AAE82, surface #EDF7F3
 - Modern, minimal, clean style
-- Must be deliverable as XAML vector resources (no raster generation from code)
+- XAML vectors remain the source of truth; deterministic raster/ICO export must be reproducible
 
 ## Three Concept Directions Considered
 
@@ -85,17 +85,18 @@ The shield uses a 32x32 viewbox coordinate space:
    DrawingImage via `<Image Source="{DynamicResource NetAccelIcon}" />` instead
    of the MaterialDesign PackIcon.
 
-### .ico File Notes
+### ICO Deliverables
 
-The existing .ico files (v2rayN.ico, NotifyIcon1-4.ico) are NOT modified by this
-task. Replacing them requires exporting the XAML vectors to PNG at 16/32/48/256px
-and packaging into .ico format using an image editor (e.g., Inkscape + GIMP,
-or a tool like Greenfish Icon Editor). This is a manual step outside the scope
-of code-based asset generation.
+`tools/NetAccel.IconExporter` loads the production XAML resources on an STA WPF
+thread, renders each state, and packages embedded PNG frames into ICO files.
+The export is deterministic and does not require an external image editor.
 
-Recommended .ico replacement mapping:
-- v2rayN.ico -> NetAccel.ico (from NetAccelIcon, 256px multi-size)
-- NotifyIcon1.ico -> idle state (from NetAccelTrayIdle)
-- NotifyIcon2.ico -> connected state (from NetAccelTrayConnected)
-- NotifyIcon3.ico -> faulted state (from NetAccelTrayFaulted)
-- NotifyIcon4.ico -> starting state (from NetAccelTrayStartingBase)
+Generated files:
+
+- `Resources/NetAccel.ico`
+- `Resources/NotifyIcon1.ico` -- idle
+- `Resources/NotifyIcon2.ico` -- connected
+- `Resources/NotifyIcon3.ico` -- faulted
+- `Resources/NotifyIcon4.ico` -- starting
+
+Each file contains 16, 20, 24, 32, 40, 48, 64, 128, and 256 px frames.

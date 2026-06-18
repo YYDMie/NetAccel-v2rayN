@@ -7,8 +7,8 @@ namespace v2rayN.Managed.Services;
 
 public sealed class ManagedThemeService : IDisposable
 {
-    private const string LightSource = "/Managed/Resources/Colors.xaml";
-    private const string DarkSource = "/Managed/Resources/Colors.Dark.xaml";
+    private const string LightSource = "pack://application:,,,/NetAccel;component/Managed/Resources/Colors.xaml";
+    private const string DarkSource = "pack://application:,,,/NetAccel;component/Managed/Resources/Colors.Dark.xaml";
     private static readonly string[] HighContrastOverrideKeys =
     [
         "ManagedBrushBgCanvas",
@@ -22,6 +22,10 @@ public sealed class ManagedThemeService : IDisposable
         "ManagedBrushPrimary500",
         "ManagedBrushPrimary600",
         "ManagedBrushPrimary100",
+        "ManagedBrushPrimaryButton",
+        "ManagedBrushPrimaryButtonHover",
+        "ManagedBrushPrimaryButtonText",
+        "ManagedBrushSecondaryButtonText",
     ];
 
     private readonly Application _application;
@@ -88,7 +92,7 @@ public sealed class ManagedThemeService : IDisposable
         var current = dictionaries.FirstOrDefault(dictionary =>
             dictionary.Source?.OriginalString.EndsWith("Colors.xaml", StringComparison.OrdinalIgnoreCase) == true
             || dictionary.Source?.OriginalString.EndsWith("Colors.Dark.xaml", StringComparison.OrdinalIgnoreCase) == true);
-        var replacement = new ResourceDictionary { Source = new Uri(source, UriKind.Relative) };
+        var replacement = new ResourceDictionary { Source = new Uri(source, UriKind.Absolute) };
 
         if (current == null)
         {
@@ -113,6 +117,10 @@ public sealed class ManagedThemeService : IDisposable
         _application.Resources["ManagedBrushPrimary500"] = SystemColors.HighlightBrush;
         _application.Resources["ManagedBrushPrimary600"] = SystemColors.HighlightTextBrush;
         _application.Resources["ManagedBrushPrimary100"] = SystemColors.ControlBrush;
+        _application.Resources["ManagedBrushPrimaryButton"] = SystemColors.HighlightBrush;
+        _application.Resources["ManagedBrushPrimaryButtonHover"] = SystemColors.HighlightBrush;
+        _application.Resources["ManagedBrushPrimaryButtonText"] = SystemColors.HighlightTextBrush;
+        _application.Resources["ManagedBrushSecondaryButtonText"] = SystemColors.WindowTextBrush;
     }
 
     private void ClearHighContrastOverrides()

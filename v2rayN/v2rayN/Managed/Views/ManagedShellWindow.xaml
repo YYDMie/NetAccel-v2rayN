@@ -16,7 +16,7 @@
     AutomationProperties.Name="NetAccel 加速客户端"
     Background="{DynamicResource ManagedBrushBgCanvas}"
     FontFamily="{DynamicResource ManagedFontFamily}"
-    Icon="/Resources/v2rayN.ico"
+    Icon="pack://application:,,,/NetAccel;component/Resources/NetAccel.ico"
     IsTabStop="True"
     KeyboardNavigation.TabNavigation="Cycle"
     TextOptions.TextFormattingMode="Display"
@@ -50,6 +50,7 @@
                         Background="{DynamicResource ManagedBrushPrimary100}"
                         CornerRadius="{DynamicResource ManagedRadiusMedium}">
                         <Image
+                            x:Name="BrandIcon"
                             Width="22"
                             Height="22"
                             HorizontalAlignment="Center"
@@ -457,36 +458,44 @@
                                 Title="常用">
                                 <StackPanel>
                                     <CheckBox
+                                        x:Name="AutoRunCheckBox"
                                         Margin="0,0,0,10"
                                         AutomationProperties.Name="开机后自动打开"
                                         Content="开机后自动打开"
-                                        IsChecked="{Binding AutoRun, Mode=TwoWay}" />
+                                        IsChecked="{Binding AutoRun, Mode=TwoWay}"
+                                        Style="{DynamicResource ManagedCheckBoxStyle}" />
                                     <CheckBox
                                         Margin="0,0,0,10"
                                         AutomationProperties.Name="打开后自动加速"
                                         Content="打开后自动加速"
-                                        IsChecked="{Binding AutoConnect, Mode=TwoWay}" />
+                                        IsChecked="{Binding AutoConnect, Mode=TwoWay}"
+                                        Style="{DynamicResource ManagedCheckBoxStyle}" />
                                     <CheckBox
                                         Margin="0,0,0,10"
                                         AutomationProperties.Name="关闭窗口时最小化到托盘"
                                         Content="关闭窗口时最小化到托盘"
-                                        IsChecked="{Binding MinimizeToTray, Mode=TwoWay}" />
+                                        IsChecked="{Binding MinimizeToTray, Mode=TwoWay}"
+                                        Style="{DynamicResource ManagedCheckBoxStyle}" />
                                     <CheckBox
                                         Margin="0,0,0,10"
                                         AutomationProperties.Name="通知提醒"
                                         Content="通知提醒"
-                                        IsChecked="{Binding NotificationsEnabled, Mode=TwoWay}" />
+                                        IsChecked="{Binding NotificationsEnabled, Mode=TwoWay}"
+                                        Style="{DynamicResource ManagedCheckBoxStyle}" />
                                     <CheckBox
                                         Margin="0,0,0,12"
                                         AutomationProperties.Name="使用全局加速"
                                         Content="加速范围：全局加速"
-                                        IsChecked="{Binding UseTun, Mode=TwoWay}" />
+                                        IsChecked="{Binding UseTun, Mode=TwoWay}"
+                                        Style="{DynamicResource ManagedCheckBoxStyle}" />
                                     <TextBlock Style="{DynamicResource ManagedSecondaryTextStyle}" Text="主题" />
                                     <ComboBox
+                                        x:Name="ThemeSelector"
                                         Margin="0,6,0,12"
                                         AutomationProperties.Name="主题"
                                         SelectedValue="{Binding Theme, Mode=TwoWay}"
-                                        SelectedValuePath="Tag">
+                                        SelectedValuePath="Tag"
+                                        Style="{DynamicResource ManagedComboBoxStyle}">
                                         <ComboBoxItem Content="跟随系统" Tag="system" />
                                         <ComboBoxItem Content="浅色" Tag="light" />
                                         <ComboBoxItem Content="深色" Tag="dark" />
@@ -553,7 +562,9 @@
                             </controls:BubbleCard>
 
                             <Expander
+                                x:Name="AdvancedSettingsExpander"
                                 Margin="0,16,0,0"
+                                AutomationProperties.Name="高级设置"
                                 Header="高级"
                                 IsExpanded="False">
                                 <controls:BubbleCard
@@ -623,7 +634,7 @@
 
         <tb:TaskbarIcon
             x:Name="ManagedTray"
-            IconSource="/Resources/NotifyIcon1.ico"
+            IconSource="pack://application:,,,/NetAccel;component/Resources/NotifyIcon1.ico"
             NoLeftClickDelay="True"
             ToolTipText="NetAccel"
             TrayMouseDoubleClick="ManagedTray_DoubleClick">

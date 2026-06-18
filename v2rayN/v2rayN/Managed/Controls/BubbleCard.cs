@@ -15,6 +15,9 @@ public sealed class BubbleCard : ContentControl
         IsTabStopProperty.OverrideMetadata(
             typeof(BubbleCard),
             new FrameworkPropertyMetadata(false));
+        FocusableProperty.OverrideMetadata(
+            typeof(BubbleCard),
+            new FrameworkPropertyMetadata(false));
     }
 
     protected override AutomationPeer OnCreateAutomationPeer()
@@ -75,7 +78,12 @@ internal sealed class BubbleCardAutomationPeer : FrameworkElementAutomationPeer
 
     protected override string GetNameCore()
     {
-        var name = GetAutomationName() ?? _owner.Title;
+        var name = GetAutomationName();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            name = _owner.Title;
+        }
+
         return string.IsNullOrWhiteSpace(name) ? base.GetNameCore() : name;
     }
 

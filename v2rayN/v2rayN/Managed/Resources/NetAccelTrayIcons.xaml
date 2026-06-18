@@ -24,7 +24,7 @@
             <DrawingGroup>
                 <!-- Shield outline, muted color -->
                 <GeometryDrawing
-                    Brush="{DynamicResource ManagedBrushTextSecondary}"
+                    Brush="Transparent"
                     Geometry="M 16,2
                               C 16,2 8,2 6,4
                               C 4,6 3,9 3,12
@@ -33,7 +33,11 @@
                               C 18,28.5 20,27.5 22,26
                               C 27,22 29,16 29,12
                               C 29,9 28,6 26,4
-                              C 24,2 16,2 16,2 Z" />
+                              C 24,2 16,2 16,2 Z">
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="{DynamicResource ManagedBrushTextSecondary}" Thickness="2.5" />
+                    </GeometryDrawing.Pen>
+                </GeometryDrawing>
                 <!-- Small horizontal dash in center (neutral indicator) -->
                 <GeometryDrawing
                     Brush="{DynamicResource ManagedBrushTextSecondary}"
@@ -94,7 +98,7 @@
                               C 24,2 16,2 16,2 Z" />
                 <!-- Exclamation mark (vertical bar) -->
                 <GeometryDrawing
-                    Brush="{DynamicResource ManagedBrushDanger}"
+                    Brush="#FFFFFFFF"
                     Geometry="M 14.5,10
                               L 17.5,10
                               L 17.5,18
@@ -102,7 +106,7 @@
                               Z" />
                 <!-- Exclamation mark (dot) -->
                 <GeometryDrawing
-                    Brush="{DynamicResource ManagedBrushDanger}"
+                    Brush="#FFFFFFFF"
                     Geometry="M 14.5,20
                               L 17.5,20
                               L 17.5,23
@@ -120,7 +124,6 @@
             <DrawingGroup>
                 <!-- Pulse ring (will be animated via opacity) -->
                 <GeometryDrawing
-                    x:Name="PulseRing"
                     Brush="{DynamicResource ManagedBrushPrimary100}"
                     Geometry="M 16,0
                               C 16,0 6,0 4,2.5

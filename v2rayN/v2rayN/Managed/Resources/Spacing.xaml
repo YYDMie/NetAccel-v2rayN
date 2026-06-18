@@ -9,7 +9,7 @@
     <sys:Double x:Key="ManagedSpace24">24</sys:Double>
     <sys:Double x:Key="ManagedSpace32">32</sys:Double>
     <sys:Double x:Key="ManagedSpace40">40</sys:Double>
-    <sys:Double x:Key="ManagedNavWidth">148</sys:Double>
+    <GridLength x:Key="ManagedNavWidth">148</GridLength>
     <sys:Double x:Key="ManagedContentMaxWidth">720</sys:Double>
     <sys:Double x:Key="ManagedConnectOrbSize">136</sys:Double>
 

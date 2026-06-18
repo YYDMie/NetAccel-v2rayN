@@ -183,50 +183,6 @@ public class ManagedUISmokeTests
     #region Theme Smoke Tests
 
     [Fact]
-    public void ThemeService_ApplyLight_SetsIsDarkFalse()
-    {
-        var themeService = new FakeThemeService();
-
-        themeService.Apply("light");
-
-        Assert.False(themeService.IsDark);
-        Assert.Equal("light", themeService.CurrentTheme);
-    }
-
-    [Fact]
-    public void ThemeService_ApplyDark_SetsIsDarkTrue()
-    {
-        var themeService = new FakeThemeService();
-
-        themeService.Apply("dark");
-
-        Assert.True(themeService.IsDark);
-        Assert.Equal("dark", themeService.CurrentTheme);
-    }
-
-    [Fact]
-    public void ThemeService_ApplySystem_FollowsSystemSetting()
-    {
-        var themeService = new FakeThemeService { SystemIsDark = true };
-
-        themeService.Apply("system");
-
-        Assert.True(themeService.IsDark);
-        Assert.Equal("system", themeService.CurrentTheme);
-    }
-
-    [Fact]
-    public void ThemeService_HighContrast_DetectedAndApplied()
-    {
-        var themeService = new FakeThemeService { HighContrastEnabled = true };
-
-        themeService.Apply("system");
-
-        Assert.True(themeService.IsHighContrast);
-        Assert.True(themeService.IsDark);
-    }
-
-    [Fact]
     public void SettingsViewModel_ThemeNormalization_WorksCorrectly()
     {
         var preferencesStore = new FakePreferencesStore();
@@ -783,37 +739,6 @@ public class ManagedUISmokeTests
                 Message = "诊断包已导出",
             };
             return Task.FromResult(result);
-        }
-    }
-
-    private sealed class FakeThemeService
-    {
-        public bool IsDark { get; private set; }
-        public bool IsHighContrast { get; private set; }
-        public string CurrentTheme { get; private set; } = "system";
-        public bool SystemIsDark { get; init; }
-        public bool HighContrastEnabled { get; init; }
-
-        public void Apply(string theme)
-        {
-            CurrentTheme = theme;
-            IsHighContrast = HighContrastEnabled;
-
-            switch (theme.ToLowerInvariant())
-            {
-                case "light":
-                    IsDark = false;
-                    break;
-                case "dark":
-                    IsDark = true;
-                    break;
-                case "system":
-                    IsDark = SystemIsDark || HighContrastEnabled;
-                    break;
-                default:
-                    IsDark = SystemIsDark;
-                    break;
-            }
         }
     }
 
