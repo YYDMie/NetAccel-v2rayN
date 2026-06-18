@@ -52,6 +52,10 @@ public partial class App : Application
             .BuildApp();
 
         base.OnStartup(e);
+
+        var managedWindow = new Managed.Views.ManagedShellWindow();
+        MainWindow = managedWindow;
+        managedWindow.Show();
     }
 
     private void App_DispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)

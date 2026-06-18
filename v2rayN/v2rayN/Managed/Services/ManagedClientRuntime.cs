@@ -8,9 +8,11 @@ using NetAccel.Managed.Instance;
 using NetAccel.Managed.Presentation;
 using NetAccel.Managed.Runtime;
 using NetAccel.Managed.Selection;
+using NetAccel.Managed.Settings;
 using NetAccel.Managed.Startup;
 using NetAccel.Managed.Vault;
 using ServiceLib.Common;
+using ServiceLib.Handler;
 using System.Net.Http;
 
 namespace v2rayN.Managed.Services;
@@ -21,6 +23,7 @@ public sealed class ManagedClientRuntime : IDisposable
     private readonly WindowsCredentialVault _vault;
     private readonly ConnectionOwnershipCoordinator _ownership;
     private readonly ManagedConnectionCoordinator _connection;
+    private readonly ClassicModeLauncher _classicLauncher;
     private bool _disposed;
 
     private ManagedClientRuntime(
@@ -32,7 +35,10 @@ public sealed class ManagedClientRuntime : IDisposable
         ManagedHomeViewModel homeViewModel,
         ManagedRoutesViewModel routesViewModel,
         ManagedActivityViewModel activityViewModel,
-        ManagedDiagnosticsViewModel diagnosticsViewModel)
+        ManagedDiagnosticsViewModel diagnosticsViewModel,
+        ManagedSettingsViewModel settingsViewModel,
+        ManagedTrayViewModel trayViewModel,
+        ClassicModeLauncher classicLauncher)
     {
         _api = api;
         _vault = vault;
@@ -43,6 +49,9 @@ public sealed class ManagedClientRuntime : IDisposable
         RoutesViewModel = routesViewModel;
         ActivityViewModel = activityViewModel;
         DiagnosticsViewModel = diagnosticsViewModel;
+        SettingsViewModel = settingsViewModel;
+        TrayViewModel = trayViewModel;
+        _classicLauncher = classicLauncher;
     }
 
     public ManagedLoginViewModel LoginViewModel { get; }
@@ -50,6 +59,8 @@ public sealed class ManagedClientRuntime : IDisposable
     public ManagedRoutesViewModel RoutesViewModel { get; }
     public ManagedActivityViewModel ActivityViewModel { get; }
     public ManagedDiagnosticsViewModel DiagnosticsViewModel { get; }
+    public ManagedSettingsViewModel SettingsViewModel { get; }
+    public ManagedTrayViewModel TrayViewModel { get; }
 
     public static ManagedClientRuntime Create()
     {
@@ -118,6 +129,37 @@ public sealed class ManagedClientRuntime : IDisposable
                 return login.IsReady;
             },
             clientVersion: Utils.GetVersionInfo());
+        var classicLauncher = new ClassicModeLauncher(ownership, connection);
+        var preferences = new ManagedPreferencesStore();
+        var settings = new ManagedSettingsViewModel(
+            preferences,
+            () => AppManager.Instance.Config.GuiItem.AutoRun,
+            async (enabled, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppManager.Instance.Config.GuiItem.AutoRun = enabled;
+                if (await ConfigHandler.SaveConfig(AppManager.Instance.Config) != 0)
+                {
+                    return false;
+                }
+
+                return await AutoStartupHandler.UpdateTask(AppManager.Instance.Config);
+            },
+            ct => auth.GetAccountIdAsync(),
+            async ct =>
+            {
+                if (connection.Status.State is ManagedConnectionState.Connected
+                    or ManagedConnectionState.Starting
+                    or ManagedConnectionState.Stopping
+                    or ManagedConnectionState.Faulted)
+                {
+                    await connection.StopAsync(ct);
+                }
+
+                await login.ReturnToLoginAsync(ct);
+            },
+            classicLauncher.TryHandoffToClassicAsync,
+            coreRunner.RestoreManagedSystemProxyAsync);
 
         return new ManagedClientRuntime(
             api,
@@ -128,8 +170,17 @@ public sealed class ManagedClientRuntime : IDisposable
             home,
             routes,
             new ManagedActivityViewModel(connection),
-            new ManagedDiagnosticsViewModel(diagnostics));
+            new ManagedDiagnosticsViewModel(diagnostics),
+            settings,
+            new ManagedTrayViewModel(connection),
+            classicLauncher);
     }
+
+    public Task<ClassicModeHandoffResult> EnterClassicModeAsync(CancellationToken ct = default)
+        => SettingsViewModel.PrepareClassicModeAsync(ct);
+
+    public Task LeaveClassicModeAsync()
+        => _classicLauncher.ReleaseClassicAsync();
 
     public void Dispose()
     {
@@ -142,10 +193,12 @@ public sealed class ManagedClientRuntime : IDisposable
         RoutesViewModel.Dispose();
         ActivityViewModel.Dispose();
         DiagnosticsViewModel.Dispose();
+        TrayViewModel.Dispose();
         HomeViewModel.Dispose();
         LoginViewModel.Dispose();
         Task.Run(async () =>
         {
+            await _classicLauncher.DisposeAsync();
             await ManagedExitCleanup.RunExitCleanupAsync(_ownership, _connection);
             await _ownership.DisposeAsync();
         }).GetAwaiter().GetResult();

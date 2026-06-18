@@ -46,6 +46,12 @@
                         KeyboardNavigation.TabNavigation="Continue"
                         Style="{StaticResource MaterialDesignToolBar}">
                         <Menu Margin="0,1" Style="{StaticResource ToolbarMenu}">
+                            <MenuItem
+                                x:Name="menuReturnManaged"
+                                Padding="{StaticResource MarginLeftRight8}"
+                                AutomationProperties.Name="返回托管首页"
+                                Header="返回托管首页"
+                                Visibility="Collapsed" />
                             <MenuItem Padding="{StaticResource MarginLeftRight8}" AutomationProperties.Name="{x:Static resx:ResUI.menuServers}">
                                 <MenuItem.Header>
                                     <StackPanel Orientation="Horizontal">

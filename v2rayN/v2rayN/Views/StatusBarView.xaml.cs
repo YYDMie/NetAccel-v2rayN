@@ -10,6 +10,10 @@ public partial class StatusBarView
     {
         InitializeComponent();
         _config = AppManager.Instance.Config;
+        if (NetAccelIdentity.IsNetAccel)
+        {
+            tbNotify.Visibility = Visibility.Collapsed;
+        }
         ViewModel = StatusBarViewModel.Instance;
         ViewModel?.InitUpdateView(UpdateViewHandler);
 

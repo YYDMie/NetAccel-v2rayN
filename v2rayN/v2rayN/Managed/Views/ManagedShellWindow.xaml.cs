@@ -1,10 +1,15 @@
 using System.ComponentModel;
+using H.NotifyIcon.Core;
 using NetAccel.Managed.Presentation;
 using NetAccel.Managed.Runtime;
+using ServiceLib.Handler.SysProxy;
+using ServiceLib.Manager;
 using System.Windows.Controls;
+using System.Windows.Media.Imaging;
 using v2rayN.Managed.Controls;
 using v2rayN.Managed.Services;
 using v2rayN.Managed.ViewModels;
+using v2rayN.Views;
 
 namespace v2rayN.Managed.Views;
 
@@ -15,6 +20,11 @@ public partial class ManagedShellWindow : Window
     private bool _homeInitialized;
     private bool _routesInitialized;
     private bool _diagnosticsInitialized;
+    private bool _settingsInitialized;
+    private bool _autoConnectAttempted;
+    private bool _allowClose;
+    private MainWindow? _classicWindow;
+    private ManagedTrayMode _lastTrayMode = ManagedTrayMode.Idle;
 
     private readonly Dictionary<ManagedShellSection, (string Title, string Subtitle)> _sectionCopy = new()
     {
@@ -34,9 +44,16 @@ public partial class ManagedShellWindow : Window
         RoutesSection.DataContext = _runtime.RoutesViewModel;
         ActivitySection.DataContext = _runtime.ActivityViewModel;
         DiagnosticsSection.DataContext = _runtime.DiagnosticsViewModel;
+        SettingsSection.DataContext = _runtime.SettingsViewModel;
         _runtime.LoginViewModel.PropertyChanged += LoginViewModel_PropertyChanged;
         _runtime.HomeViewModel.PropertyChanged += HomeViewModel_PropertyChanged;
+        _runtime.TrayViewModel.PropertyChanged += TrayViewModel_PropertyChanged;
         Loaded += ManagedShellWindow_Loaded;
+        Closing += ManagedShellWindow_Closing;
+        Application.Current.SessionEnding += Current_SessionEnding;
+        ManagedClassicModeBridge.ReturnToManagedAsync = ReturnToManagedAsync;
+        CurrentVersionStatus.Value = Utils.GetVersionInfo();
+        ThreadPool.RegisterWaitForSingleObject(App.ProgramStarted, OnProgramStarted, null, -1, false);
 
         foreach (var navigation in new[]
                  {
@@ -52,12 +69,17 @@ public partial class ManagedShellWindow : Window
 
         ShowSection(ManagedShellSection.Home);
         UpdateShellVisibility();
+        UpdateTrayState();
     }
 
     protected override void OnClosed(EventArgs e)
     {
         _runtime.LoginViewModel.PropertyChanged -= LoginViewModel_PropertyChanged;
         _runtime.HomeViewModel.PropertyChanged -= HomeViewModel_PropertyChanged;
+        _runtime.TrayViewModel.PropertyChanged -= TrayViewModel_PropertyChanged;
+        Application.Current.SessionEnding -= Current_SessionEnding;
+        ManagedClassicModeBridge.ReturnToManagedAsync = null;
+        ManagedTray.Dispose();
         _runtime.Dispose();
         base.OnClosed(e);
     }
@@ -80,10 +102,12 @@ public partial class ManagedShellWindow : Window
         RoutesSection.Visibility = section == ManagedShellSection.Routes ? Visibility.Visible : Visibility.Collapsed;
         ActivitySection.Visibility = section == ManagedShellSection.Activity ? Visibility.Visible : Visibility.Collapsed;
         DiagnosticsSection.Visibility = section == ManagedShellSection.Diagnostics ? Visibility.Visible : Visibility.Collapsed;
+        SettingsSection.Visibility = section == ManagedShellSection.Settings ? Visibility.Visible : Visibility.Collapsed;
         PlaceholderSection.Visibility = section is ManagedShellSection.Home
             or ManagedShellSection.Routes
             or ManagedShellSection.Activity
             or ManagedShellSection.Diagnostics
+            or ManagedShellSection.Settings
             ? Visibility.Collapsed
             : Visibility.Visible;
         PlaceholderSection.Title = copy.Title;
@@ -101,6 +125,11 @@ public partial class ManagedShellWindow : Window
             _diagnosticsInitialized = true;
             _ = RefreshDiagnosticsAsync();
         }
+
+        if (section == ManagedShellSection.Settings && !_settingsInitialized)
+        {
+            _ = EnsureSettingsInitializedAsync();
+        }
     }
 
     private async void ManagedShellWindow_Loaded(object sender, RoutedEventArgs e)
@@ -111,6 +140,7 @@ public partial class ManagedShellWindow : Window
         }
 
         _startupAttempted = true;
+        await EnsureSettingsInitializedAsync();
         await _runtime.LoginViewModel.InitializeAsync();
     }
 
@@ -141,6 +171,28 @@ public partial class ManagedShellWindow : Window
             {
                 Dispatcher.InvokeAsync(UpdateHomeState);
             }
+        }
+
+        if (e.PropertyName == nameof(ManagedHomeViewModel.RouteName))
+        {
+            _runtime.TrayViewModel.SetRouteName(_runtime.HomeViewModel.RouteName);
+        }
+    }
+
+    private void OnProgramStarted(object? state, bool timedOut)
+    {
+        Dispatcher.InvokeAsync(ShowActiveWindow);
+    }
+
+    private void TrayViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (Dispatcher.CheckAccess())
+        {
+            UpdateTrayState();
+        }
+        else
+        {
+            Dispatcher.InvokeAsync(UpdateTrayState);
         }
     }
 
@@ -235,6 +287,84 @@ public partial class ManagedShellWindow : Window
         DiagnosticDetails.Visibility = Visibility.Visible;
     }
 
+    private async void SaveSettings_Click(object sender, RoutedEventArgs e)
+    {
+        await _runtime.SettingsViewModel.SaveAsync();
+        _runtime.HomeViewModel.NetworkMode = _runtime.SettingsViewModel.UseTun
+            ? ManagedConnectionMode.Tun
+            : ManagedConnectionMode.SystemProxy;
+    }
+
+    private async void Logout_Click(object sender, RoutedEventArgs e)
+    {
+        await _runtime.SettingsViewModel.LogoutAsync();
+    }
+
+    private async void OpenClassicMode_Click(object sender, RoutedEventArgs e)
+    {
+        await OpenClassicModeAsync();
+    }
+
+    private async void RestoreSystemProxy_Click(object sender, RoutedEventArgs e)
+    {
+        await _runtime.SettingsViewModel.RestoreSystemProxyAsync();
+    }
+
+    private void OpenDataDirectory_Click(object sender, RoutedEventArgs e)
+    {
+        ProcUtils.ProcessStart(Utils.StartupPath());
+    }
+
+    private void ManagedTray_DoubleClick(object sender, RoutedEventArgs e)
+    {
+        ShowActiveWindow();
+    }
+
+    private async void TrayPrimaryAction_Click(object sender, RoutedEventArgs e)
+    {
+        if (_runtime.TrayViewModel.IsClassicMode)
+        {
+            ShowClassicWindow();
+            return;
+        }
+
+        await _runtime.HomeViewModel.ToggleConnectionAsync();
+    }
+
+    private void TrayOpenMain_Click(object sender, RoutedEventArgs e)
+    {
+        ShowActiveWindow();
+    }
+
+    private void TrayDiagnostics_Click(object sender, RoutedEventArgs e)
+    {
+        ShowManagedSection(ManagedShellSection.Diagnostics);
+        _ = RefreshDiagnosticsAsync();
+    }
+
+    private void TraySettings_Click(object sender, RoutedEventArgs e)
+    {
+        ShowManagedSection(ManagedShellSection.Settings);
+    }
+
+    private async void TrayStopClassic_Click(object sender, RoutedEventArgs e)
+    {
+        await StopClassicConnectionAsync();
+    }
+
+    private async void TrayReturnManaged_Click(object sender, RoutedEventArgs e)
+    {
+        await ReturnToManagedAsync();
+    }
+
+    private async void TrayExit_Click(object sender, RoutedEventArgs e)
+    {
+        _allowClose = true;
+        ManagedTray.Dispose();
+        await AppManager.Instance.AppExitAsync(false);
+        Application.Current.Shutdown();
+    }
+
     private void UpdateShellVisibility()
     {
         var isReady = _runtime.LoginViewModel.IsReady;
@@ -245,10 +375,12 @@ public partial class ManagedShellWindow : Window
 
         if (isReady)
         {
+            _runtime.SettingsViewModel.MarkSynchronized(DateTimeOffset.Now);
+            _ = _runtime.SettingsViewModel.RefreshAccountAsync();
             if (!_homeInitialized)
             {
                 _homeInitialized = true;
-                _ = RefreshHomeAsync();
+                _ = RefreshHomeAndAutoConnectAsync();
             }
 
             if (!_routesInitialized)
@@ -262,12 +394,23 @@ public partial class ManagedShellWindow : Window
             _homeInitialized = false;
             _routesInitialized = false;
             _diagnosticsInitialized = false;
+            _autoConnectAttempted = false;
         }
     }
 
-    private async Task RefreshHomeAsync()
+    private async Task RefreshHomeAndAutoConnectAsync()
     {
         await _runtime.HomeViewModel.RefreshAsync();
+        _runtime.HomeViewModel.NetworkMode = _runtime.SettingsViewModel.UseTun
+            ? ManagedConnectionMode.Tun
+            : ManagedConnectionMode.SystemProxy;
+        if (!_autoConnectAttempted
+            && _runtime.SettingsViewModel.AutoConnect
+            && _runtime.HomeViewModel.Stage == ManagedHomeStage.Idle)
+        {
+            _autoConnectAttempted = true;
+            await _runtime.HomeViewModel.ToggleConnectionAsync();
+        }
         UpdateHomeState();
     }
 
@@ -314,5 +457,164 @@ public partial class ManagedShellWindow : Window
             ManagedHomeStage.NeedsPermission or ManagedHomeStage.ClassicRunning => StatusTone.Warning,
             _ => StatusTone.Info,
         };
+        _runtime.TrayViewModel.SetRouteName(_runtime.HomeViewModel.RouteName);
+    }
+
+    private async Task EnsureSettingsInitializedAsync()
+    {
+        if (_settingsInitialized)
+        {
+            return;
+        }
+
+        _settingsInitialized = true;
+        await _runtime.SettingsViewModel.InitializeAsync();
+        _runtime.HomeViewModel.NetworkMode = _runtime.SettingsViewModel.UseTun
+            ? ManagedConnectionMode.Tun
+            : ManagedConnectionMode.SystemProxy;
+    }
+
+    private async Task OpenClassicModeAsync()
+    {
+        var result = await _runtime.EnterClassicModeAsync();
+        if (!result.Success)
+        {
+            return;
+        }
+
+        _runtime.TrayViewModel.SetClassicMode(true);
+        ShowClassicWindow();
+        Hide();
+    }
+
+    private void ShowClassicWindow()
+    {
+        _classicWindow ??= new MainWindow();
+        Application.Current.MainWindow = _classicWindow;
+        _classicWindow.ShowHideWindow(true);
+    }
+
+    private async Task ReturnToManagedAsync()
+    {
+        await StopClassicConnectionAsync();
+        await _runtime.LeaveClassicModeAsync();
+        _runtime.TrayViewModel.SetClassicMode(false);
+        _classicWindow?.ShowHideWindow(false);
+        Application.Current.MainWindow = this;
+        ShowManagedSection(ManagedShellSection.Home);
+        await RefreshHomeAndAutoConnectAsync();
+    }
+
+    private static async Task StopClassicConnectionAsync()
+    {
+        var config = AppManager.Instance.Config;
+        await CoreManager.Instance.CoreStop();
+        await SysProxyHandler.UpdateSysProxy(config, true);
+        await AppManager.Instance.RemoveTunDeviceAsync();
+    }
+
+    private void ShowManagedSection(ManagedShellSection section)
+    {
+        Application.Current.MainWindow = this;
+        Show();
+        if (WindowState == WindowState.Minimized)
+        {
+            WindowState = WindowState.Normal;
+        }
+
+        Activate();
+        switch (section)
+        {
+            case ManagedShellSection.Diagnostics:
+                DiagnosticsNavigation.IsChecked = true;
+                break;
+            case ManagedShellSection.Settings:
+                SettingsNavigation.IsChecked = true;
+                break;
+            default:
+                HomeNavigation.IsChecked = true;
+                break;
+        }
+    }
+
+    private void ShowActiveWindow()
+    {
+        if (_runtime.TrayViewModel.IsClassicMode)
+        {
+            ShowClassicWindow();
+        }
+        else
+        {
+            ShowManagedSection(ManagedShellSection.Home);
+        }
+    }
+
+    private void UpdateTrayState()
+    {
+        var tray = _runtime.TrayViewModel;
+        TrayHeader.Header = tray.Header;
+        TrayPrimaryAction.Header = tray.PrimaryActionText;
+        TrayCurrentRoute.Header = tray.RouteText;
+        TrayCurrentRoute.Visibility = tray.IsRouteVisible ? Visibility.Visible : Visibility.Collapsed;
+        ManagedTray.ToolTipText = tray.ToolTipText;
+
+        var classic = tray.IsClassicMode;
+        TrayDiagnostics.Visibility = classic ? Visibility.Collapsed : Visibility.Visible;
+        TraySettings.Visibility = classic ? Visibility.Collapsed : Visibility.Visible;
+        TrayStopClassic.Visibility = classic ? Visibility.Visible : Visibility.Collapsed;
+        TrayReturnManaged.Visibility = classic ? Visibility.Visible : Visibility.Collapsed;
+
+        var iconIndex = tray.Mode switch
+        {
+            ManagedTrayMode.Connected => 2,
+            ManagedTrayMode.Faulted => 3,
+            ManagedTrayMode.Starting or ManagedTrayMode.Recovering or ManagedTrayMode.Classic => 4,
+            _ => 1,
+        };
+        ManagedTray.IconSource = BitmapFrame.Create(
+            new Uri($"pack://application:,,,/Resources/NotifyIcon{iconIndex}.ico", UriKind.Absolute));
+
+        if (_settingsInitialized
+            && _runtime.SettingsViewModel.NotificationsEnabled
+            && tray.Mode != _lastTrayMode)
+        {
+            if (tray.Mode == ManagedTrayMode.Connected)
+            {
+                ManagedTray.ShowNotification("NetAccel", "网络加速已开启。", NotificationIcon.Info);
+            }
+            else if (tray.Mode == ManagedTrayMode.Faulted)
+            {
+                ManagedTray.ShowNotification("NetAccel", "网络加速未能完成，请打开诊断。", NotificationIcon.Error);
+            }
+        }
+
+        _lastTrayMode = tray.Mode;
+    }
+
+    private async void ManagedShellWindow_Closing(object? sender, CancelEventArgs e)
+    {
+        if (_allowClose)
+        {
+            return;
+        }
+
+        e.Cancel = true;
+        if (_runtime.SettingsViewModel.MinimizeToTray)
+        {
+            Hide();
+            return;
+        }
+
+        _allowClose = true;
+        ManagedTray.Dispose();
+        await AppManager.Instance.AppExitAsync(false);
+        Application.Current.Shutdown();
+    }
+
+    private async void Current_SessionEnding(object sender, SessionEndingCancelEventArgs e)
+    {
+        _allowClose = true;
+        ManagedTray.Dispose();
+        await AppManager.Instance.AppExitAsync(false);
     }
 }

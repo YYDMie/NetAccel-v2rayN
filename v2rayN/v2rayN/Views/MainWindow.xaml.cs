@@ -1,6 +1,7 @@
 using System.Windows.Controls;
 using System.Windows.Media;
 using MaterialDesignThemes.Wpf;
+using v2rayN.Managed.Services;
 using v2rayN.Manager;
 
 namespace v2rayN.Views;
@@ -27,6 +28,13 @@ public partial class MainWindow
         menuCheckUpdate.Click += MenuCheckUpdate_Click;
         btnNewUpdate.Click += MenuCheckUpdate_Click;
         menuBackupAndRestore.Click += MenuBackupAndRestore_Click;
+        menuReturnManaged.Click += MenuReturnManaged_Click;
+
+        if (NetAccelIdentity.IsNetAccel)
+        {
+            menuReturnManaged.Visibility = Visibility.Visible;
+            menuPromotion.Visibility = Visibility.Collapsed;
+        }
 
         ViewModel = new MainWindowViewModel(UpdateViewHandler);
 
@@ -154,7 +162,9 @@ public partial class MainWindow
              .DisposeWith(disposables);
         });
 
-        Title = $"{Utils.GetVersion()} - {(Utils.IsAdministrator() ? ResUI.RunAsAdmin : ResUI.NotRunAsAdmin)}";
+        Title = NetAccelIdentity.IsNetAccel
+            ? $"NetAccel · 经典模式 - {Utils.GetVersionInfo()}"
+            : $"{Utils.GetVersion()} - {(Utils.IsAdministrator() ? ResUI.RunAsAdmin : ResUI.NotRunAsAdmin)}";
         if (_config.UiItem.AutoHideStartup)
         {
             WindowState = WindowState.Minimized;
@@ -320,6 +330,11 @@ public partial class MainWindow
     private void MenuPromotion_Click(object sender, RoutedEventArgs e)
     {
         ProcUtils.ProcessStart($"{Utils.Base64Decode(Global.PromotionUrl)}?t={DateTime.Now.Ticks}");
+    }
+
+    private async void MenuReturnManaged_Click(object sender, RoutedEventArgs e)
+    {
+        await ManagedClassicModeBridge.ReturnAsync();
     }
 
     private void MenuSettingsSetUWP_Click(object sender, RoutedEventArgs e)

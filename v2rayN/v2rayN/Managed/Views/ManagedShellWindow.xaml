@@ -7,6 +7,7 @@
     xmlns:local="clr-namespace:v2rayN.Managed.Views"
     xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:tb="clr-namespace:H.NotifyIcon;assembly=H.NotifyIcon.Wpf"
     Title="NetAccel"
     Width="820"
     Height="620"
@@ -425,6 +426,149 @@
                             </controls:BubbleCard>
                         </StackPanel>
 
+                        <StackPanel
+                            x:Name="SettingsSection"
+                            Visibility="Collapsed">
+                            <controls:BubbleCard
+                                Description="这些偏好只影响当前 Windows 用户的 NetAccel。"
+                                Title="常用">
+                                <StackPanel>
+                                    <CheckBox
+                                        Margin="0,0,0,10"
+                                        AutomationProperties.Name="开机后自动打开"
+                                        Content="开机后自动打开"
+                                        IsChecked="{Binding AutoRun, Mode=TwoWay}" />
+                                    <CheckBox
+                                        Margin="0,0,0,10"
+                                        AutomationProperties.Name="打开后自动加速"
+                                        Content="打开后自动加速"
+                                        IsChecked="{Binding AutoConnect, Mode=TwoWay}" />
+                                    <CheckBox
+                                        Margin="0,0,0,10"
+                                        AutomationProperties.Name="关闭窗口时最小化到托盘"
+                                        Content="关闭窗口时最小化到托盘"
+                                        IsChecked="{Binding MinimizeToTray, Mode=TwoWay}" />
+                                    <CheckBox
+                                        Margin="0,0,0,10"
+                                        AutomationProperties.Name="通知提醒"
+                                        Content="通知提醒"
+                                        IsChecked="{Binding NotificationsEnabled, Mode=TwoWay}" />
+                                    <CheckBox
+                                        Margin="0,0,0,12"
+                                        AutomationProperties.Name="使用全局加速"
+                                        Content="加速范围：全局加速"
+                                        IsChecked="{Binding UseTun, Mode=TwoWay}" />
+                                    <TextBlock
+                                        Style="{DynamicResource ManagedSecondaryTextStyle}"
+                                        Text="主题：跟随系统　语言：简体中文" />
+                                    <controls:PillButton
+                                        Margin="0,14,0,0"
+                                        HorizontalAlignment="Left"
+                                        AutomationProperties.Name="保存设置"
+                                        Click="SaveSettings_Click"
+                                        Content="保存设置"
+                                        IsEnabled="{Binding CanAct}" />
+                                </StackPanel>
+                            </controls:BubbleCard>
+
+                            <controls:BubbleCard
+                                Margin="0,16,0,0"
+                                Description="退出登录会先安全停止托管连接，再清除账号凭据。"
+                                Title="账号和设备">
+                                <StackPanel>
+                                    <controls:StatusBubble
+                                        Margin="0,0,0,8"
+                                        HorizontalAlignment="Left"
+                                        Text="账号"
+                                        Value="{Binding AccountText}" />
+                                    <controls:StatusBubble
+                                        Margin="0,0,0,8"
+                                        HorizontalAlignment="Left"
+                                        Text="设备"
+                                        Value="{Binding DeviceText}" />
+                                    <controls:StatusBubble
+                                        HorizontalAlignment="Left"
+                                        Text="最后同步"
+                                        Value="{Binding LastSyncText}" />
+                                    <controls:PillButton
+                                        Margin="0,14,0,0"
+                                        HorizontalAlignment="Left"
+                                        AutomationProperties.Name="退出登录"
+                                        Click="Logout_Click"
+                                        Content="退出登录"
+                                        IsEnabled="{Binding CanAct}"
+                                        Style="{DynamicResource ManagedSecondaryPillButtonStyle}" />
+                                </StackPanel>
+                            </controls:BubbleCard>
+
+                            <controls:BubbleCard
+                                Margin="0,16,0,0"
+                                Description="NetAccel 更新器将在 R4 安全更新模块中启用。"
+                                Title="更新">
+                                <StackPanel>
+                                    <controls:StatusBubble
+                                        x:Name="CurrentVersionStatus"
+                                        Margin="0,0,0,8"
+                                        HorizontalAlignment="Left"
+                                        Text="当前版本"
+                                        Value="--" />
+                                    <controls:StatusBubble
+                                        HorizontalAlignment="Left"
+                                        Text="更新渠道"
+                                        Value="stable" />
+                                </StackPanel>
+                            </controls:BubbleCard>
+
+                            <Expander
+                                Margin="0,16,0,0"
+                                Header="高级"
+                                IsExpanded="False">
+                                <controls:BubbleCard
+                                    Margin="0,10,0,0"
+                                    Description="仅在排查问题或使用经典功能时打开。"
+                                    Title="高级工具">
+                                    <StackPanel>
+                                        <WrapPanel>
+                                            <controls:PillButton
+                                                AutomationProperties.Name="打开经典模式"
+                                                Click="OpenClassicMode_Click"
+                                                Content="打开经典模式"
+                                                IsEnabled="{Binding CanAct}" />
+                                            <controls:PillButton
+                                                Margin="8,0,0,0"
+                                                AutomationProperties.Name="恢复系统代理"
+                                                Click="RestoreSystemProxy_Click"
+                                                Content="恢复系统代理"
+                                                IsEnabled="{Binding CanAct}"
+                                                Style="{DynamicResource ManagedSecondaryPillButtonStyle}" />
+                                            <controls:PillButton
+                                                Margin="8,0,0,0"
+                                                AutomationProperties.Name="打开数据目录"
+                                                Click="OpenDataDirectory_Click"
+                                                Content="打开数据目录"
+                                                Style="{DynamicResource ManagedSecondaryPillButtonStyle}" />
+                                        </WrapPanel>
+                                        <TextBlock
+                                            Margin="0,12,0,0"
+                                            Style="{DynamicResource ManagedSecondaryTextStyle}"
+                                            Text="本地代理详情和核心版本仅在经典模式或详细诊断中显示。"
+                                            TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </controls:BubbleCard>
+                            </Expander>
+
+                            <Border
+                                Margin="0,16,0,0"
+                                Padding="14,12"
+                                Background="{DynamicResource ManagedBrushBgBubble}"
+                                CornerRadius="{DynamicResource ManagedRadiusMedium}">
+                                <TextBlock
+                                    Style="{DynamicResource ManagedSecondaryTextStyle}"
+                                    Text="{Binding Summary}"
+                                    TextWrapping="Wrap" />
+                            </Border>
+                        </StackPanel>
+
                         <controls:BubbleCard
                             x:Name="PlaceholderSection"
                             Description="页面结构已经预留，具体功能将在后续 R3 子任务中接入。"
@@ -442,5 +586,58 @@
         <local:ManagedLoginView
             x:Name="LoginView"
             Grid.Row="1" />
+
+        <tb:TaskbarIcon
+            x:Name="ManagedTray"
+            IconSource="/Resources/NotifyIcon1.ico"
+            NoLeftClickDelay="True"
+            ToolTipText="NetAccel"
+            TrayMouseDoubleClick="ManagedTray_DoubleClick">
+            <tb:TaskbarIcon.ContextMenu>
+                <ContextMenu>
+                    <MenuItem
+                        x:Name="TrayHeader"
+                        Header="NetAccel · 未加速"
+                        IsEnabled="False" />
+                    <Separator />
+                    <MenuItem
+                        x:Name="TrayPrimaryAction"
+                        Click="TrayPrimaryAction_Click"
+                        Header="一键加速" />
+                    <MenuItem
+                        x:Name="TrayCurrentRoute"
+                        Header="当前线路：智能通道"
+                        IsEnabled="False"
+                        Visibility="Collapsed" />
+                    <Separator x:Name="TrayManagedSeparator" />
+                    <MenuItem
+                        x:Name="TrayOpenMain"
+                        Click="TrayOpenMain_Click"
+                        Header="打开主界面" />
+                    <MenuItem
+                        x:Name="TrayDiagnostics"
+                        Click="TrayDiagnostics_Click"
+                        Header="一键诊断" />
+                    <MenuItem
+                        x:Name="TraySettings"
+                        Click="TraySettings_Click"
+                        Header="设置" />
+                    <MenuItem
+                        x:Name="TrayStopClassic"
+                        Click="TrayStopClassic_Click"
+                        Header="停止当前连接"
+                        Visibility="Collapsed" />
+                    <MenuItem
+                        x:Name="TrayReturnManaged"
+                        Click="TrayReturnManaged_Click"
+                        Header="返回托管首页"
+                        Visibility="Collapsed" />
+                    <Separator />
+                    <MenuItem
+                        Click="TrayExit_Click"
+                        Header="退出" />
+                </ContextMenu>
+            </tb:TaskbarIcon.ContextMenu>
+        </tb:TaskbarIcon>
     </Grid>
 </Window>
