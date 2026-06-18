@@ -30,7 +30,8 @@ public sealed class ManagedClientRuntime : IDisposable
         ManagedConnectionCoordinator connection,
         ManagedLoginViewModel loginViewModel,
         ManagedHomeViewModel homeViewModel,
-        ManagedRoutesViewModel routesViewModel)
+        ManagedRoutesViewModel routesViewModel,
+        ManagedActivityViewModel activityViewModel)
     {
         _api = api;
         _vault = vault;
@@ -39,11 +40,13 @@ public sealed class ManagedClientRuntime : IDisposable
         LoginViewModel = loginViewModel;
         HomeViewModel = homeViewModel;
         RoutesViewModel = routesViewModel;
+        ActivityViewModel = activityViewModel;
     }
 
     public ManagedLoginViewModel LoginViewModel { get; }
     public ManagedHomeViewModel HomeViewModel { get; }
     public ManagedRoutesViewModel RoutesViewModel { get; }
+    public ManagedActivityViewModel ActivityViewModel { get; }
 
     public static ManagedClientRuntime Create()
     {
@@ -106,7 +109,8 @@ public sealed class ManagedClientRuntime : IDisposable
             connection,
             new ManagedLoginViewModel(auth, startup),
             home,
-            routes);
+            routes,
+            new ManagedActivityViewModel(connection));
     }
 
     public void Dispose()
@@ -118,6 +122,7 @@ public sealed class ManagedClientRuntime : IDisposable
 
         _disposed = true;
         RoutesViewModel.Dispose();
+        ActivityViewModel.Dispose();
         HomeViewModel.Dispose();
         LoginViewModel.Dispose();
         Task.Run(async () =>

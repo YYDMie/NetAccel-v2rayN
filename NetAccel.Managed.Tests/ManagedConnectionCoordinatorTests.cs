@@ -209,6 +209,7 @@ public class ManagedConnectionCoordinatorTests
         Assert.False(result.Success);
         Assert.Equal("plan-a", coordinator.Status.EffectiveProfileId);
         Assert.Equal(ManagedConnectionState.Connected, coordinator.Status.State);
+        Assert.Equal(ManagedConnectionFailureKind.CoreStartFailed, coordinator.Status.FailureKind);
         Assert.Equal(new[] { "plan-a", "plan-b", "plan-a" }, runner.StartedProfileIds);
         Assert.Empty(selection.Calls);
     }
@@ -231,6 +232,7 @@ public class ManagedConnectionCoordinatorTests
         Assert.Equal(ManagedConnectionFailureKind.Cancelled, result.FailureKind);
         Assert.Equal(ManagedConnectionState.Connected, coordinator.Status.State);
         Assert.Equal("plan-a", coordinator.Status.EffectiveProfileId);
+        Assert.Equal(ManagedConnectionFailureKind.Cancelled, coordinator.Status.FailureKind);
         Assert.Equal(new[] { "plan-a", "plan-b", "plan-a" }, runner.StartedProfileIds);
         Assert.Equal(2, runner.StopCount);
         Assert.Empty(selection.Calls);

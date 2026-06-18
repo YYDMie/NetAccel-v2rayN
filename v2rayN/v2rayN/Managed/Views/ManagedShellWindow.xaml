@@ -263,6 +263,74 @@
                             </controls:BubbleCard>
                         </StackPanel>
 
+                        <StackPanel
+                            x:Name="ActivitySection"
+                            Visibility="Collapsed">
+                            <controls:BubbleCard
+                                Description="只显示连接、停止、恢复和失败等用户事件。"
+                                Title="最近记录">
+                                <StackPanel>
+                                    <ItemsControl ItemsSource="{Binding Items}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border
+                                                    Margin="0,0,0,8"
+                                                    Padding="16,12"
+                                                    Background="{DynamicResource ManagedBrushBgBubble}"
+                                                    CornerRadius="{DynamicResource ManagedRadiusMedium}">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <StackPanel>
+                                                            <TextBlock
+                                                                Style="{DynamicResource ManagedCardTitleTextStyle}"
+                                                                Text="{Binding Title}" />
+                                                            <TextBlock
+                                                                Margin="0,4,0,0"
+                                                                Style="{DynamicResource ManagedSecondaryTextStyle}"
+                                                                Text="{Binding Detail}"
+                                                                TextWrapping="Wrap" />
+                                                        </StackPanel>
+                                                        <TextBlock
+                                                            Grid.Column="1"
+                                                            Margin="16,0,0,0"
+                                                            VerticalAlignment="Top"
+                                                            Style="{DynamicResource ManagedSecondaryTextStyle}"
+                                                            Text="{Binding TimeText}" />
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <TextBlock
+                                        Margin="0,8,0,0"
+                                        Text="{Binding EmptyMessage}"
+                                        TextWrapping="Wrap">
+                                        <TextBlock.Style>
+                                            <Style
+                                                BasedOn="{StaticResource ManagedSecondaryTextStyle}"
+                                                TargetType="TextBlock">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding HasItems}" Value="False">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <controls:PillButton
+                                        Margin="0,14,0,0"
+                                        HorizontalAlignment="Left"
+                                        AutomationProperties.Name="查看详细日志"
+                                        Click="OpenDetailedLogs_Click"
+                                        Content="查看详细日志" />
+                                </StackPanel>
+                            </controls:BubbleCard>
+                        </StackPanel>
+
                         <controls:BubbleCard
                             x:Name="PlaceholderSection"
                             Description="页面结构已经预留，具体功能将在后续 R3 子任务中接入。"

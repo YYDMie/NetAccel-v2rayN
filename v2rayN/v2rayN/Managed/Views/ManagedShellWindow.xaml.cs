@@ -31,6 +31,7 @@ public partial class ManagedShellWindow : Window
         LoginView.AttachViewModel(_runtime.LoginViewModel);
         HomeSection.DataContext = _runtime.HomeViewModel;
         RoutesSection.DataContext = _runtime.RoutesViewModel;
+        ActivitySection.DataContext = _runtime.ActivityViewModel;
         _runtime.LoginViewModel.PropertyChanged += LoginViewModel_PropertyChanged;
         _runtime.HomeViewModel.PropertyChanged += HomeViewModel_PropertyChanged;
         Loaded += ManagedShellWindow_Loaded;
@@ -75,7 +76,8 @@ public partial class ManagedShellWindow : Window
         PageSubtitle.Text = copy.Subtitle;
         HomeSection.Visibility = section == ManagedShellSection.Home ? Visibility.Visible : Visibility.Collapsed;
         RoutesSection.Visibility = section == ManagedShellSection.Routes ? Visibility.Visible : Visibility.Collapsed;
-        PlaceholderSection.Visibility = section is ManagedShellSection.Home or ManagedShellSection.Routes
+        ActivitySection.Visibility = section == ManagedShellSection.Activity ? Visibility.Visible : Visibility.Collapsed;
+        PlaceholderSection.Visibility = section is ManagedShellSection.Home or ManagedShellSection.Routes or ManagedShellSection.Activity
             ? Visibility.Collapsed
             : Visibility.Visible;
         PlaceholderSection.Title = copy.Title;
@@ -166,6 +168,11 @@ public partial class ManagedShellWindow : Window
     private async void RefreshRoutes_Click(object sender, RoutedEventArgs e)
     {
         await RunRouteActionAsync(() => _runtime.RoutesViewModel.RefreshAsync());
+    }
+
+    private void OpenDetailedLogs_Click(object sender, RoutedEventArgs e)
+    {
+        DiagnosticsNavigation.IsChecked = true;
     }
 
     private void UpdateShellVisibility()

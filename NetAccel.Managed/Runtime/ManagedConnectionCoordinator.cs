@@ -444,7 +444,7 @@ public sealed class ManagedConnectionCoordinator : IManagedConnectionCoordinator
                 }
 
                 _active = previous;
-                SetConnectedStatus(previous);
+                SetConnectedStatus(previous, active.FailureKind, active.Message ?? "switch_failed_restored_previous");
                 return Failure(_status, active.FailureKind, active.Message ?? "switch_failed_restored_previous");
             }
 
@@ -469,7 +469,7 @@ public sealed class ManagedConnectionCoordinator : IManagedConnectionCoordinator
                     }
 
                     _active = previous;
-                    SetConnectedStatus(previous);
+                    SetConnectedStatus(previous, ManagedConnectionFailureKind.SelectionRejected, persisted.Message ?? "selection_rejected");
                     return Failure(_status, ManagedConnectionFailureKind.SelectionRejected, persisted.Message ?? "selection_rejected");
                 }
             }
@@ -489,7 +489,7 @@ public sealed class ManagedConnectionCoordinator : IManagedConnectionCoordinator
                 if (restored)
                 {
                     _active = previous;
-                    SetConnectedStatus(previous);
+                    SetConnectedStatus(previous, ManagedConnectionFailureKind.Cancelled, "switch_cancelled_restored_previous");
                     return Failure(_status, ManagedConnectionFailureKind.Cancelled, "switch_cancelled_restored_previous");
                 }
 
@@ -874,7 +874,10 @@ public sealed class ManagedConnectionCoordinator : IManagedConnectionCoordinator
         await lease.DisposeAsync();
     }
 
-    private void SetConnectedStatus(ActiveConnection active)
+    private void SetConnectedStatus(
+        ActiveConnection active,
+        ManagedConnectionFailureKind failureKind = ManagedConnectionFailureKind.None,
+        string? message = null)
     {
         SetStatus(new ManagedConnectionStatus
         {
@@ -884,6 +887,8 @@ public sealed class ManagedConnectionCoordinator : IManagedConnectionCoordinator
             PreferredProfileId = active.PreferredProfileId,
             EffectiveProfileId = active.EffectiveProfileId,
             IsFallback = active.IsFallback,
+            FailureKind = failureKind,
+            Message = message,
         });
     }
 
