@@ -73,6 +73,7 @@ public interface IManagedDiagnosticsService
 {
     Task<ManagedDiagnosticsSnapshot> CheckAsync(CancellationToken ct = default);
     Task<ManagedRepairResult> RepairAsync(CancellationToken ct = default);
+    Task<ManagedDiagnosticsExportResult> ExportAsync(string destinationPath, CancellationToken ct = default);
 }
 
 public sealed class ManagedDiagnosticsService : IManagedDiagnosticsService
@@ -83,6 +84,9 @@ public sealed class ManagedDiagnosticsService : IManagedDiagnosticsService
     private readonly Func<bool> _serviceReady;
     private readonly Func<Task<ManagedConfigPayload?>> _configProvider;
     private readonly Func<CancellationToken, Task<bool>> _resync;
+    private readonly IManagedDiagnosticsExporter _exporter;
+    private readonly string _clientVersion;
+    private readonly TimeProvider _timeProvider;
     private readonly SemaphoreSlim _operationGate = new(1, 1);
 
     public ManagedDiagnosticsService(
@@ -91,7 +95,10 @@ public sealed class ManagedDiagnosticsService : IManagedDiagnosticsService
         ConnectionOwnershipCoordinator ownership,
         Func<bool> serviceReady,
         Func<Task<ManagedConfigPayload?>> configProvider,
-        Func<CancellationToken, Task<bool>> resync)
+        Func<CancellationToken, Task<bool>> resync,
+        IManagedDiagnosticsExporter? exporter = null,
+        string clientVersion = "",
+        TimeProvider? timeProvider = null)
     {
         _connection = connection;
         _runtime = runtime;
@@ -99,6 +106,9 @@ public sealed class ManagedDiagnosticsService : IManagedDiagnosticsService
         _serviceReady = serviceReady;
         _configProvider = configProvider;
         _resync = resync;
+        _exporter = exporter ?? new ManagedDiagnosticsExporter();
+        _clientVersion = clientVersion;
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     public async Task<ManagedDiagnosticsSnapshot> CheckAsync(CancellationToken ct = default)
@@ -178,6 +188,29 @@ public sealed class ManagedDiagnosticsService : IManagedDiagnosticsService
         }
     }
 
+    public async Task<ManagedDiagnosticsExportResult> ExportAsync(
+        string destinationPath,
+        CancellationToken ct = default)
+    {
+        var owner = await _ownership.InspectAsync(ct);
+        var connection = _connection.Status;
+        var runtime = _runtime.Inspect();
+        var snapshot = BuildExportSnapshot(owner, connection, runtime);
+
+        return await _exporter.ExportAsync(
+            destinationPath,
+            new ManagedDiagnosticsExportData
+            {
+                GeneratedAt = _timeProvider.GetUtcNow(),
+                ClientVersion = _clientVersion,
+                Snapshot = snapshot,
+                Connection = connection,
+                Runtime = runtime,
+                Owner = owner?.Owner ?? ConnectionOwner.None,
+            },
+            ct);
+    }
+
     private ManagedDiagnosticsSnapshot BuildSnapshot(
         ManagedConfigPayload? payload,
         ConnectionOwnershipSnapshot? owner,
@@ -185,9 +218,7 @@ public sealed class ManagedDiagnosticsService : IManagedDiagnosticsService
         ManagedCoreRuntimeSnapshot runtime)
     {
         var classicOwnsConnection = owner?.Owner == ConnectionOwner.Classic;
-        var service = _serviceReady()
-            ? Normal("服务连接", "正常", "账号和当前设备已通过服务检查。")
-            : Error("服务连接", "异常", "当前服务会话不可用，请重新检查。");
+        var service = BuildServiceCheck();
 
         var route = BuildRouteCheck(payload, connection);
         var localNetwork = BuildLocalNetworkCheck(connection, runtime, classicOwnsConnection);
@@ -202,6 +233,27 @@ public sealed class ManagedDiagnosticsService : IManagedDiagnosticsService
             ClassicModeOwnsConnection = classicOwnsConnection,
         };
     }
+
+    private ManagedDiagnosticsSnapshot BuildExportSnapshot(
+        ConnectionOwnershipSnapshot? owner,
+        ManagedConnectionStatus connection,
+        ManagedCoreRuntimeSnapshot runtime)
+    {
+        var classicOwnsConnection = owner?.Owner == ConnectionOwner.Classic;
+        return new ManagedDiagnosticsSnapshot
+        {
+            ServiceConnection = BuildServiceCheck(),
+            CurrentRoute = BuildExportRouteCheck(connection),
+            LocalNetwork = BuildLocalNetworkCheck(connection, runtime, classicOwnsConnection),
+            AccelerationEngine = BuildEngineCheck(connection, runtime, classicOwnsConnection),
+            ClassicModeOwnsConnection = classicOwnsConnection,
+        };
+    }
+
+    private ManagedDiagnosticCheck BuildServiceCheck()
+        => _serviceReady()
+            ? Normal("服务连接", "正常", "账号和当前设备已通过服务检查。")
+            : Error("服务连接", "异常", "当前服务会话不可用，请重新检查。");
 
     private static ManagedDiagnosticCheck BuildRouteCheck(
         ManagedConfigPayload? payload,
@@ -228,6 +280,20 @@ public sealed class ManagedDiagnosticsService : IManagedDiagnosticsService
 
         return Normal("当前线路", "正常", $"已同步 {available.Count} 条可用线路。");
     }
+
+    private static ManagedDiagnosticCheck BuildExportRouteCheck(ManagedConnectionStatus connection)
+        => connection.State switch
+        {
+            ManagedConnectionState.Connected =>
+                Normal("当前线路", "正常", "当前已连接到授权线路。"),
+            ManagedConnectionState.Starting =>
+                Normal("当前线路", "连接中", "正在连接授权线路。"),
+            ManagedConnectionState.Stopping =>
+                Stopped("当前线路", "停止中", "正在停止托管连接。"),
+            ManagedConnectionState.Faulted =>
+                Error("当前线路", "不可用", "托管连接当前不可用。"),
+            _ => Stopped("当前线路", "未连接", "当前没有运行中的托管连接。"),
+        };
 
     private static ManagedDiagnosticCheck BuildLocalNetworkCheck(
         ManagedConnectionStatus connection,

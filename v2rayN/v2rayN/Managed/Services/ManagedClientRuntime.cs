@@ -116,7 +116,8 @@ public sealed class ManagedClientRuntime : IDisposable
             {
                 await login.RetryAsync(ct);
                 return login.IsReady;
-            });
+            },
+            clientVersion: Utils.GetVersionInfo());
 
         return new ManagedClientRuntime(
             api,

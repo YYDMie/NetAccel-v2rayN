@@ -215,6 +215,26 @@ public partial class ManagedShellWindow : Window
             : Visibility.Visible;
     }
 
+    private async void ExportDiagnostics_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            AddExtension = true,
+            DefaultExt = ".zip",
+            FileName = $"NetAccel-diagnostics-{DateTime.Now:yyyyMMdd-HHmmss}.zip",
+            Filter = "ZIP 诊断包 (*.zip)|*.zip",
+            OverwritePrompt = true,
+            Title = "导出脱敏诊断包",
+        };
+        if (dialog.ShowDialog(this) != true)
+        {
+            return;
+        }
+
+        await _runtime.DiagnosticsViewModel.ExportAsync(dialog.FileName);
+        DiagnosticDetails.Visibility = Visibility.Visible;
+    }
+
     private void UpdateShellVisibility()
     {
         var isReady = _runtime.LoginViewModel.IsReady;

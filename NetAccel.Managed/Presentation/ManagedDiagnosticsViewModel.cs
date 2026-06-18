@@ -62,11 +62,13 @@ public sealed class ManagedDiagnosticsViewModel : INotifyPropertyChanged, IDispo
             if (SetProperty(ref _isBusy, value))
             {
                 OnPropertyChanged(nameof(CanRepair));
+                OnPropertyChanged(nameof(CanExport));
             }
         }
     }
 
     public bool CanRepair => !IsBusy && !_classicModeOwnsConnection;
+    public bool CanExport => !IsBusy;
 
     public async Task RefreshAsync(CancellationToken ct = default)
     {
@@ -124,6 +126,34 @@ public sealed class ManagedDiagnosticsViewModel : INotifyPropertyChanged, IDispo
         catch
         {
             Summary = "修复未完成；账号、本地节点和经典订阅未被修改。";
+        }
+        finally
+        {
+            IsBusy = false;
+            _operationGate.Release();
+        }
+    }
+
+    public async Task ExportAsync(string destinationPath, CancellationToken ct = default)
+    {
+        if (!await _operationGate.WaitAsync(0, ct))
+        {
+            return;
+        }
+
+        try
+        {
+            IsBusy = true;
+            var result = await _diagnostics.ExportAsync(destinationPath, ct);
+            Summary = result.Message;
+        }
+        catch (OperationCanceledException)
+        {
+            Summary = "导出已取消。";
+        }
+        catch
+        {
+            Summary = "诊断包导出失败，账号和线路数据未被写入。";
         }
         finally
         {
