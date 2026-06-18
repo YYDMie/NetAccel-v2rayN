@@ -1,5 +1,15 @@
 namespace NetAccel.Managed.Startup;
 
+public enum ManagedStartupPhase
+{
+    CheckingCredentials,
+    RefreshingSession,
+    BindingInstance,
+    RegisteringDeviceKey,
+    CheckingControlState,
+    SyncingConfiguration,
+}
+
 public enum ManagedStartupState
 {
     NeedsLogin,

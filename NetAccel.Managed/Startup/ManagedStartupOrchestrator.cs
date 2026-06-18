@@ -17,6 +17,7 @@ namespace NetAccel.Managed.Startup;
 /// </summary>
 public interface IManagedStartupOrchestrator
 {
+    event Action<ManagedStartupPhase>? ProgressChanged;
     Task<ManagedStartupResult> StartupAsync(CancellationToken ct = default);
     Task<ManagedConfigPayload?> GetCurrentConfigAsync();
 }
@@ -40,6 +41,8 @@ public sealed class ManagedStartupOrchestrator : IManagedStartupOrchestrator
     private readonly Func<string, Task>? _logAsync;
 
     private ManagedConfigPayload? _currentConfig;
+
+    public event Action<ManagedStartupPhase>? ProgressChanged;
 
     public ManagedStartupOrchestrator(
         IAuthService auth,
@@ -80,12 +83,14 @@ public sealed class ManagedStartupOrchestrator : IManagedStartupOrchestrator
         try
         {
             // 1. Check vault for credentials
+            ReportProgress(ManagedStartupPhase.CheckingCredentials);
             if (!await _auth.HasCredentialsAsync())
             {
                 return new ManagedStartupResult { State = ManagedStartupState.NeedsLogin };
             }
 
             // 2. Refresh if needed
+            ReportProgress(ManagedStartupPhase.RefreshingSession);
             var refreshResult = await _auth.RefreshAsync(ct);
             if (!refreshResult.IsSuccess)
             {
@@ -100,6 +105,7 @@ public sealed class ManagedStartupOrchestrator : IManagedStartupOrchestrator
             }
 
             // 3. Ensure instance
+            ReportProgress(ManagedStartupPhase.BindingInstance);
             var installationKey = await _installation.GetOrCreateInstallationKeyAsync();
             var instanceId = await _instance.GetInstanceIdAsync();
             var oldCredential = await _instance.GetInstanceCredentialAsync();
@@ -131,6 +137,7 @@ public sealed class ManagedStartupOrchestrator : IManagedStartupOrchestrator
             }
 
             // 4. Ensure device key and register with instance
+            ReportProgress(ManagedStartupPhase.RegisteringDeviceKey);
             var (deviceKeyResult, deviceKeyStartupResult) = await EnsureDeviceKeyAsync(ct);
             if (!deviceKeyResult.IsSuccess)
             {
@@ -138,6 +145,7 @@ public sealed class ManagedStartupOrchestrator : IManagedStartupOrchestrator
             }
 
             // 5. Heartbeat / control
+            ReportProgress(ManagedStartupPhase.CheckingControlState);
             var hbResult = await _instance.HeartbeatAsync(
                 _clientVersion,
                 _coreVersions,
@@ -188,6 +196,7 @@ public sealed class ManagedStartupOrchestrator : IManagedStartupOrchestrator
             }
 
             // 7. Config fetch / decrypt / ack using managed-envelope/v1
+            ReportProgress(ManagedStartupPhase.SyncingConfiguration);
             var (payload, revision, envelopeParsed, fromOffline) = await FetchConfigV1Async(ct);
 
             if (envelopeParsed && revision.HasValue)
@@ -509,6 +518,11 @@ public sealed class ManagedStartupOrchestrator : IManagedStartupOrchestrator
         {
             await _logAsync(message);
         }
+    }
+
+    private void ReportProgress(ManagedStartupPhase phase)
+    {
+        ProgressChanged?.Invoke(phase);
     }
 
     private sealed class EnsureResult

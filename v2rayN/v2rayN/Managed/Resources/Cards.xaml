@@ -1,0 +1,11 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Style x:Key="ManagedCardFrameStyle" TargetType="{x:Type Border}">
+        <Setter Property="Background" Value="{DynamicResource ManagedBrushBgSurface}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ManagedBrushBorderDefault}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource ManagedRadiusLarge}" />
+        <Setter Property="Padding" Value="{DynamicResource ManagedCardPadding}" />
+    </Style>
+</ResourceDictionary>

@@ -1,0 +1,42 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <FontFamily x:Key="ManagedFontFamily">Microsoft YaHei UI, Segoe UI</FontFamily>
+
+    <Style x:Key="ManagedPageTitleTextStyle" TargetType="{x:Type TextBlock}">
+        <Setter Property="FontFamily" Value="{DynamicResource ManagedFontFamily}" />
+        <Setter Property="FontSize" Value="24" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource ManagedBrushTextPrimary}" />
+    </Style>
+
+    <Style x:Key="ManagedCardTitleTextStyle" TargetType="{x:Type TextBlock}">
+        <Setter Property="FontFamily" Value="{DynamicResource ManagedFontFamily}" />
+        <Setter Property="FontSize" Value="17" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource ManagedBrushTextPrimary}" />
+    </Style>
+
+    <Style x:Key="ManagedBodyTextStyle" TargetType="{x:Type TextBlock}">
+        <Setter Property="FontFamily" Value="{DynamicResource ManagedFontFamily}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="Normal" />
+        <Setter Property="Foreground" Value="{DynamicResource ManagedBrushTextPrimary}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <Style x:Key="ManagedSecondaryTextStyle" TargetType="{x:Type TextBlock}">
+        <Setter Property="FontFamily" Value="{DynamicResource ManagedFontFamily}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontWeight" Value="Normal" />
+        <Setter Property="Foreground" Value="{DynamicResource ManagedBrushTextSecondary}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <Style x:Key="ManagedNumericStatusTextStyle" TargetType="{x:Type TextBlock}">
+        <Setter Property="FontFamily" Value="{DynamicResource ManagedFontFamily}" />
+        <Setter Property="FontSize" Value="20" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource ManagedBrushTextPrimary}" />
+    </Style>
+</ResourceDictionary>

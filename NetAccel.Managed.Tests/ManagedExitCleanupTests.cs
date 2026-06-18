@@ -188,6 +188,21 @@ public class ManagedExitCleanupTests
     }
 
     [Fact]
+    public void ManagedExitCleanup_Unregister_ClearsAllCallbacks()
+    {
+        ManagedConnectionGuard.IsClassicOperationAllowed = () => false;
+        ManagedConnectionGuard.OnExitCleanupAsync = () => Task.CompletedTask;
+        ManagedConnectionGuard.OnPostRestoreCleanupAsync = _ => Task.CompletedTask;
+
+        ManagedExitCleanup.Unregister();
+
+        ManagedConnectionGuard.IsClassicOperationAllowed.Should().BeNull();
+        ManagedConnectionGuard.OnExitCleanupAsync.Should().BeNull();
+        ManagedConnectionGuard.OnPostRestoreCleanupAsync.Should().BeNull();
+        ManagedConnectionGuard.CanPerformClassicOperation().Should().BeTrue();
+    }
+
+    [Fact]
     public async Task ManagedConnectionGuard_RunPostRestoreCleanupAsync_CallsRegisteredCallback()
     {
         string? receivedDir = null;

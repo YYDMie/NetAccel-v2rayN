@@ -1,0 +1,9 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <CornerRadius x:Key="ManagedRadiusSmall">8</CornerRadius>
+    <CornerRadius x:Key="ManagedRadiusMedium">12</CornerRadius>
+    <CornerRadius x:Key="ManagedRadiusLarge">18</CornerRadius>
+    <CornerRadius x:Key="ManagedRadiusHero">24</CornerRadius>
+    <CornerRadius x:Key="ManagedRadiusPill">999</CornerRadius>
+</ResourceDictionary>

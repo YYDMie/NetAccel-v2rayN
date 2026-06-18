@@ -128,6 +128,20 @@ public class ManagedStartupOrchestratorTests
     }
 
     [Fact]
+    public async Task Startup_NoCredentials_ReportsCredentialCheckPhase()
+    {
+        var (orch, _, http, cacheDir, _, _) = CreateOrchestrator();
+        var phases = new List<ManagedStartupPhase>();
+        orch.ProgressChanged += phases.Add;
+
+        await orch.StartupAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal([ManagedStartupPhase.CheckingCredentials], phases);
+        http.Dispose();
+        Directory.Delete(cacheDir, true);
+    }
+
+    [Fact]
     public async Task Startup_RefreshSuccess_InstanceSuccess_ReturnsReady()
     {
         var (orch, vault, http, cacheDir, _, _) = CreateOrchestrator((vault, serverPublicKey, serverPrivateKey) => (req, ct) =>

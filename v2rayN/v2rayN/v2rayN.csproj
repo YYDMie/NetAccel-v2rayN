@@ -41,6 +41,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<ProjectReference Include="..\..\NetAccel.Managed\NetAccel.Managed.csproj" />
 		<ProjectReference Include="..\ServiceLib\ServiceLib.csproj" />
 	</ItemGroup>
 

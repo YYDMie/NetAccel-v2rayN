@@ -1,0 +1,111 @@
+<UserControl
+    x:Class="v2rayN.Managed.Views.ManagedLoginView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="clr-namespace:v2rayN.Managed.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    d:DesignHeight="548"
+    d:DesignWidth="672"
+    Background="{DynamicResource ManagedBrushBgCanvas}"
+    mc:Ignorable="d">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="ManagedBooleanToVisibilityConverter" />
+    </UserControl.Resources>
+
+    <Grid Margin="{DynamicResource ManagedWindowPageMargin}">
+        <controls:BubbleCard
+            Width="380"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            AutomationProperties.Name="{Binding Title}">
+            <StackPanel>
+                <Border
+                    Width="58"
+                    Height="58"
+                    HorizontalAlignment="Center"
+                    Background="{DynamicResource ManagedBrushPrimary100}"
+                    CornerRadius="{DynamicResource ManagedRadiusHero}">
+                    <materialDesign:PackIcon
+                        Width="30"
+                        Height="30"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Foreground="{DynamicResource ManagedBrushPrimary600}"
+                        Kind="ShieldCheckOutline" />
+                </Border>
+
+                <TextBlock
+                    Margin="0,18,0,0"
+                    HorizontalAlignment="Center"
+                    Style="{DynamicResource ManagedPageTitleTextStyle}"
+                    Text="{Binding Title}" />
+                <TextBlock
+                    Margin="0,8,0,0"
+                    HorizontalAlignment="Center"
+                    TextAlignment="Center"
+                    Style="{DynamicResource ManagedSecondaryTextStyle}"
+                    Text="{Binding Message}" />
+
+                <StackPanel
+                    x:Name="LoginForm"
+                    Margin="0,22,0,0"
+                    Visibility="{Binding IsLoginFormVisible, Converter={StaticResource ManagedBooleanToVisibilityConverter}}">
+                    <TextBlock Style="{DynamicResource ManagedSecondaryTextStyle}" Text="账号" />
+                    <TextBox
+                        x:Name="UsernameTextBox"
+                        Margin="0,6,0,14"
+                        AutomationProperties.Name="账号"
+                        Style="{DynamicResource ManagedTextBoxStyle}"
+                        Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}" />
+
+                    <TextBlock Style="{DynamicResource ManagedSecondaryTextStyle}" Text="密码" />
+                    <PasswordBox
+                        x:Name="PasswordInput"
+                        Margin="0,6,0,0"
+                        AutomationProperties.Name="密码"
+                        Style="{DynamicResource ManagedPasswordBoxStyle}" />
+                </StackPanel>
+
+                <ProgressBar
+                    Height="4"
+                    Margin="0,22,0,0"
+                    IsIndeterminate="True"
+                    Foreground="{DynamicResource ManagedBrushPrimary500}"
+                    Visibility="{Binding IsBusy, Converter={StaticResource ManagedBooleanToVisibilityConverter}}" />
+
+                <Button
+                    x:Name="PrimaryAction"
+                    Margin="0,22,0,0"
+                    AutomationProperties.Name="{Binding PrimaryActionText}"
+                    Content="{Binding PrimaryActionText}"
+                    IsEnabled="{Binding CanSubmit}"
+                    Style="{DynamicResource ManagedPillButtonStyle}"
+                    Visibility="{Binding IsPrimaryActionVisible, Converter={StaticResource ManagedBooleanToVisibilityConverter}}" />
+
+                <Button
+                    x:Name="CancelAction"
+                    Margin="0,12,0,0"
+                    AutomationProperties.Name="取消"
+                    Content="取消"
+                    Style="{DynamicResource ManagedSecondaryPillButtonStyle}"
+                    Visibility="{Binding IsCancelVisible, Converter={StaticResource ManagedBooleanToVisibilityConverter}}" />
+
+                <Button
+                    x:Name="ReturnToLoginAction"
+                    Margin="0,12,0,0"
+                    AutomationProperties.Name="退出账号"
+                    Content="退出账号"
+                    Style="{DynamicResource ManagedSecondaryPillButtonStyle}"
+                    Visibility="{Binding IsReturnToLoginVisible, Converter={StaticResource ManagedBooleanToVisibilityConverter}}" />
+
+                <TextBlock
+                    Margin="0,18,0,0"
+                    HorizontalAlignment="Center"
+                    Style="{DynamicResource ManagedSecondaryTextStyle}"
+                    Text="网络设置与诊断可在登录后打开。" />
+            </StackPanel>
+        </controls:BubbleCard>
+    </Grid>
+</UserControl>

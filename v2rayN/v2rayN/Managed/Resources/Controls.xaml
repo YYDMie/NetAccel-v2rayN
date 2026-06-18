@@ -1,0 +1,284 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="clr-namespace:v2rayN.Managed.Controls">
+    <Style
+        BasedOn="{StaticResource ManagedPillButtonStyle}"
+        TargetType="{x:Type controls:PillButton}" />
+
+    <Style TargetType="{x:Type controls:BubbleCard}">
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type controls:BubbleCard}">
+                    <Border
+                        x:Name="CardBorder"
+                        Padding="{DynamicResource ManagedCardPadding}"
+                        Background="{DynamicResource ManagedBrushBgSurface}"
+                        BorderBrush="{DynamicResource ManagedBrushBorderDefault}"
+                        BorderThickness="1"
+                        CornerRadius="{DynamicResource ManagedRadiusLarge}">
+                        <StackPanel>
+                            <TextBlock
+                                x:Name="CardTitle"
+                                Style="{DynamicResource ManagedCardTitleTextStyle}"
+                                Text="{TemplateBinding Title}" />
+                            <TextBlock
+                                x:Name="CardDescription"
+                                Margin="0,4,0,0"
+                                Style="{DynamicResource ManagedSecondaryTextStyle}"
+                                Text="{TemplateBinding Description}" />
+                            <ContentPresenter
+                                x:Name="CardContent"
+                                Margin="0,16,0,0"
+                                Content="{TemplateBinding Content}"
+                                ContentTemplate="{TemplateBinding ContentTemplate}" />
+                        </StackPanel>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="Title" Value="">
+                            <Setter TargetName="CardTitle" Property="Visibility" Value="Collapsed" />
+                        </Trigger>
+                        <Trigger Property="Description" Value="">
+                            <Setter TargetName="CardDescription" Property="Visibility" Value="Collapsed" />
+                        </Trigger>
+                        <Trigger Property="Content" Value="{x:Null}">
+                            <Setter TargetName="CardContent" Property="Visibility" Value="Collapsed" />
+                        </Trigger>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="CardBorder" Property="Background" Value="{DynamicResource ManagedBrushBgBubble}" />
+                            <Setter TargetName="CardBorder" Property="BorderBrush" Value="{DynamicResource ManagedBrushPrimary100}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="{x:Type controls:StatusBubble}">
+        <Setter Property="Height" Value="32" />
+        <Setter Property="Foreground" Value="{DynamicResource ManagedBrushTextSecondary}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type controls:StatusBubble}">
+                    <Border
+                        x:Name="StatusBorder"
+                        Padding="12,6"
+                        Background="{DynamicResource ManagedBrushBgBubble}"
+                        CornerRadius="{DynamicResource ManagedRadiusPill}">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse
+                                x:Name="StatusDot"
+                                Width="7"
+                                Height="7"
+                                Margin="0,0,7,0"
+                                VerticalAlignment="Center"
+                                Fill="{DynamicResource ManagedBrushTextSecondary}" />
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                FontFamily="{DynamicResource ManagedFontFamily}"
+                                FontSize="12"
+                                Foreground="{TemplateBinding Foreground}"
+                                Text="{TemplateBinding Text}" />
+                            <TextBlock
+                                x:Name="StatusValue"
+                                Margin="6,0,0,0"
+                                VerticalAlignment="Center"
+                                FontFamily="{DynamicResource ManagedFontFamily}"
+                                FontSize="12"
+                                FontWeight="SemiBold"
+                                Foreground="{TemplateBinding Foreground}"
+                                Text="{TemplateBinding Value}" />
+                        </StackPanel>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="Value" Value="">
+                            <Setter TargetName="StatusValue" Property="Visibility" Value="Collapsed" />
+                        </Trigger>
+                        <Trigger Property="Tone" Value="Success">
+                            <Setter TargetName="StatusBorder" Property="Background" Value="{DynamicResource ManagedBrushSuccessSurface}" />
+                            <Setter TargetName="StatusDot" Property="Fill" Value="{DynamicResource ManagedBrushSuccess}" />
+                            <Setter Property="Foreground" Value="{DynamicResource ManagedBrushSuccess}" />
+                        </Trigger>
+                        <Trigger Property="Tone" Value="Warning">
+                            <Setter TargetName="StatusBorder" Property="Background" Value="{DynamicResource ManagedBrushWarningSurface}" />
+                            <Setter TargetName="StatusDot" Property="Fill" Value="{DynamicResource ManagedBrushWarning}" />
+                            <Setter Property="Foreground" Value="{DynamicResource ManagedBrushWarning}" />
+                        </Trigger>
+                        <Trigger Property="Tone" Value="Danger">
+                            <Setter TargetName="StatusBorder" Property="Background" Value="{DynamicResource ManagedBrushDangerSurface}" />
+                            <Setter TargetName="StatusDot" Property="Fill" Value="{DynamicResource ManagedBrushDanger}" />
+                            <Setter Property="Foreground" Value="{DynamicResource ManagedBrushDanger}" />
+                        </Trigger>
+                        <Trigger Property="Tone" Value="Info">
+                            <Setter TargetName="StatusBorder" Property="Background" Value="{DynamicResource ManagedBrushInfoSurface}" />
+                            <Setter TargetName="StatusDot" Property="Fill" Value="{DynamicResource ManagedBrushInfo}" />
+                            <Setter Property="Foreground" Value="{DynamicResource ManagedBrushInfo}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="{x:Type controls:RouteBubble}">
+        <Setter Property="MinHeight" Value="76" />
+        <Setter Property="Padding" Value="16,12" />
+        <Setter Property="Background" Value="{DynamicResource ManagedBrushBgSurface}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ManagedBrushBorderDefault}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type controls:RouteBubble}">
+                    <Border
+                        x:Name="RouteBorder"
+                        Padding="{TemplateBinding Padding}"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="{DynamicResource ManagedRadiusMedium}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock
+                                        Style="{DynamicResource ManagedCardTitleTextStyle}"
+                                        Text="{TemplateBinding DisplayName}" />
+                                    <Border
+                                        x:Name="RecommendedBadge"
+                                        Margin="8,0,0,0"
+                                        Padding="8,2"
+                                        Background="{DynamicResource ManagedBrushPrimary100}"
+                                        CornerRadius="{DynamicResource ManagedRadiusPill}"
+                                        Visibility="Collapsed">
+                                        <TextBlock
+                                            FontFamily="{DynamicResource ManagedFontFamily}"
+                                            FontSize="11"
+                                            Foreground="{DynamicResource ManagedBrushPrimary600}"
+                                            Text="推荐" />
+                                    </Border>
+                                </StackPanel>
+                                <TextBlock
+                                    Margin="0,4,0,0"
+                                    Style="{DynamicResource ManagedSecondaryTextStyle}"
+                                    Text="{TemplateBinding Region}" />
+                            </StackPanel>
+                            <TextBlock
+                                Grid.Column="1"
+                                Margin="16,0,0,0"
+                                VerticalAlignment="Center"
+                                Style="{DynamicResource ManagedSecondaryTextStyle}"
+                                Text="{TemplateBinding StatusText}" />
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="RouteBorder" Property="Background" Value="{DynamicResource ManagedBrushBgBubbleHover}" />
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="RouteBorder" Property="Background" Value="{DynamicResource ManagedBrushPrimary100}" />
+                            <Setter TargetName="RouteBorder" Property="BorderBrush" Value="{DynamicResource ManagedBrushPrimary500}" />
+                            <Setter TargetName="RouteBorder" Property="BorderThickness" Value="2" />
+                        </Trigger>
+                        <Trigger Property="IsRecommended" Value="True">
+                            <Setter TargetName="RecommendedBadge" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="RouteBorder" Property="Opacity" Value="0.55" />
+                            <Setter Property="Cursor" Value="Arrow" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="{x:Type controls:ConnectOrb}">
+        <Setter Property="Width" Value="{DynamicResource ManagedConnectOrbSize}" />
+        <Setter Property="Height" Value="{DynamicResource ManagedConnectOrbSize}" />
+        <Setter Property="Background" Value="{DynamicResource ManagedBrushBgSurface}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ManagedBrushPrimary100}" />
+        <Setter Property="BorderThickness" Value="5" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type controls:ConnectOrb}">
+                    <Grid>
+                        <Ellipse
+                            x:Name="PulseRing"
+                            Margin="-8"
+                            Fill="{DynamicResource ManagedBrushPrimary100}"
+                            Opacity="0" />
+                        <Ellipse
+                            x:Name="OrbSurface"
+                            Fill="{TemplateBinding Background}"
+                            Stroke="{TemplateBinding BorderBrush}"
+                            StrokeThickness="{TemplateBinding BorderThickness}" />
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock
+                                HorizontalAlignment="Center"
+                                FontFamily="{DynamicResource ManagedFontFamily}"
+                                FontSize="17"
+                                FontWeight="SemiBold"
+                                Foreground="{TemplateBinding Foreground}"
+                                Text="{TemplateBinding StatusText}" />
+                            <TextBlock
+                                Margin="0,5,0,0"
+                                HorizontalAlignment="Center"
+                                FontFamily="{DynamicResource ManagedFontFamily}"
+                                FontSize="12"
+                                Foreground="{TemplateBinding Foreground}"
+                                Opacity="0.75"
+                                Text="{TemplateBinding ActionText}" />
+                        </StackPanel>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="OrbSurface" Property="Fill" Value="{DynamicResource ManagedBrushBgBubbleHover}" />
+                        </Trigger>
+                        <Trigger Property="State" Value="Starting">
+                            <Setter TargetName="PulseRing" Property="Opacity" Value="0.55" />
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                                        <DoubleAnimation
+                                            Storyboard.TargetName="PulseRing"
+                                            Storyboard.TargetProperty="Opacity"
+                                            From="0.2"
+                                            To="0.75"
+                                            Duration="0:0:1.2" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                        </Trigger>
+                        <Trigger Property="State" Value="Connected">
+                            <Setter TargetName="OrbSurface" Property="Fill" Value="{DynamicResource ManagedBrushPrimary500}" />
+                            <Setter TargetName="OrbSurface" Property="Stroke" Value="{DynamicResource ManagedBrushPrimary500}" />
+                            <Setter Property="Foreground" Value="White" />
+                        </Trigger>
+                        <Trigger Property="State" Value="Recovering">
+                            <Setter TargetName="OrbSurface" Property="Fill" Value="{DynamicResource ManagedBrushWarningSurface}" />
+                            <Setter TargetName="OrbSurface" Property="Stroke" Value="{DynamicResource ManagedBrushWarning}" />
+                        </Trigger>
+                        <Trigger Property="State" Value="Faulted">
+                            <Setter TargetName="OrbSurface" Property="Fill" Value="{DynamicResource ManagedBrushDangerSurface}" />
+                            <Setter TargetName="OrbSurface" Property="Stroke" Value="{DynamicResource ManagedBrushDanger}" />
+                        </Trigger>
+                        <Trigger Property="State" Value="Disabled">
+                            <Setter TargetName="OrbSurface" Property="Fill" Value="{DynamicResource ManagedBrushBgCanvas}" />
+                            <Setter TargetName="OrbSurface" Property="Stroke" Value="{DynamicResource ManagedBrushBorderDefault}" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="OrbSurface" Property="Stroke" Value="{DynamicResource ManagedBrushInfo}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+</ResourceDictionary>

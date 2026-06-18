@@ -42,6 +42,13 @@ public static class ManagedExitCleanup
         ManagedConnectionGuard.OnPostRestoreCleanupAsync = RunPostRestoreCleanupAsync;
     }
 
+    public static void Unregister()
+    {
+        ManagedConnectionGuard.IsClassicOperationAllowed = null;
+        ManagedConnectionGuard.OnExitCleanupAsync = null;
+        ManagedConnectionGuard.OnPostRestoreCleanupAsync = null;
+    }
+
     /// <summary>
     /// Idempotent exit cleanup. Stops managed connection, releases ownership, cleans TUN.
     /// Must not respect caller cancellation tokens.

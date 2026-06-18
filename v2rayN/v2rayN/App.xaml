@@ -14,6 +14,15 @@
                     PrimaryColor="Blue"
                     SecondaryColor="Lime" />
                 <ResourceDictionary Source="pack://application:,,,/MaterialDesignThemes.Wpf;component/Themes/MaterialDesign2.Defaults.xaml" />
+                <ResourceDictionary Source="/Managed/Resources/Colors.xaml" />
+                <ResourceDictionary Source="/Managed/Resources/Typography.xaml" />
+                <ResourceDictionary Source="/Managed/Resources/Spacing.xaml" />
+                <ResourceDictionary Source="/Managed/Resources/Radius.xaml" />
+                <ResourceDictionary Source="/Managed/Resources/Buttons.xaml" />
+                <ResourceDictionary Source="/Managed/Resources/Cards.xaml" />
+                <ResourceDictionary Source="/Managed/Resources/Inputs.xaml" />
+                <ResourceDictionary Source="/Managed/Resources/Navigation.xaml" />
+                <ResourceDictionary Source="/Managed/Resources/Controls.xaml" />
             </ResourceDictionary.MergedDictionaries>
             <system:Double x:Key="MenuItemHeight">32</system:Double>
             <system:Double x:Key="StdFontSize">12</system:Double>

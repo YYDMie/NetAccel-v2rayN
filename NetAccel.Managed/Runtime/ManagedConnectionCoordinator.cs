@@ -182,7 +182,15 @@ public sealed class ServiceLibManagedCoreRunner : IManagedCoreRunner
     }
 }
 
-public sealed class ManagedConnectionCoordinator
+public interface IManagedConnectionCoordinator
+{
+    event Action<ManagedConnectionStatus>? StatusChanged;
+    ManagedConnectionStatus Status { get; }
+    Task<ManagedConnectionResult> StartAsync(ManagedConnectionStartRequest request, CancellationToken ct = default);
+    Task<ManagedConnectionResult> StopAsync(CancellationToken ct = default);
+}
+
+public sealed class ManagedConnectionCoordinator : IManagedConnectionCoordinator
 {
     private readonly ConnectionOwnershipCoordinator _ownership;
     private readonly IManagedCoreRunner _coreRunner;
