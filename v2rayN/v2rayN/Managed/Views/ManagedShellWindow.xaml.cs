@@ -14,6 +14,7 @@ public partial class ManagedShellWindow : Window
     private bool _startupAttempted;
     private bool _homeInitialized;
     private bool _routesInitialized;
+    private bool _diagnosticsInitialized;
 
     private readonly Dictionary<ManagedShellSection, (string Title, string Subtitle)> _sectionCopy = new()
     {
@@ -32,6 +33,7 @@ public partial class ManagedShellWindow : Window
         HomeSection.DataContext = _runtime.HomeViewModel;
         RoutesSection.DataContext = _runtime.RoutesViewModel;
         ActivitySection.DataContext = _runtime.ActivityViewModel;
+        DiagnosticsSection.DataContext = _runtime.DiagnosticsViewModel;
         _runtime.LoginViewModel.PropertyChanged += LoginViewModel_PropertyChanged;
         _runtime.HomeViewModel.PropertyChanged += HomeViewModel_PropertyChanged;
         Loaded += ManagedShellWindow_Loaded;
@@ -77,7 +79,11 @@ public partial class ManagedShellWindow : Window
         HomeSection.Visibility = section == ManagedShellSection.Home ? Visibility.Visible : Visibility.Collapsed;
         RoutesSection.Visibility = section == ManagedShellSection.Routes ? Visibility.Visible : Visibility.Collapsed;
         ActivitySection.Visibility = section == ManagedShellSection.Activity ? Visibility.Visible : Visibility.Collapsed;
-        PlaceholderSection.Visibility = section is ManagedShellSection.Home or ManagedShellSection.Routes or ManagedShellSection.Activity
+        DiagnosticsSection.Visibility = section == ManagedShellSection.Diagnostics ? Visibility.Visible : Visibility.Collapsed;
+        PlaceholderSection.Visibility = section is ManagedShellSection.Home
+            or ManagedShellSection.Routes
+            or ManagedShellSection.Activity
+            or ManagedShellSection.Diagnostics
             ? Visibility.Collapsed
             : Visibility.Visible;
         PlaceholderSection.Title = copy.Title;
@@ -86,6 +92,14 @@ public partial class ManagedShellWindow : Window
         {
             _routesInitialized = true;
             _ = RefreshRoutesAsync();
+        }
+
+        if (section == ManagedShellSection.Diagnostics
+            && _runtime.LoginViewModel.IsReady
+            && !_diagnosticsInitialized)
+        {
+            _diagnosticsInitialized = true;
+            _ = RefreshDiagnosticsAsync();
         }
     }
 
@@ -173,6 +187,32 @@ public partial class ManagedShellWindow : Window
     private void OpenDetailedLogs_Click(object sender, RoutedEventArgs e)
     {
         DiagnosticsNavigation.IsChecked = true;
+        DiagnosticDetails.Visibility = Visibility.Visible;
+    }
+
+    private async void RefreshDiagnostics_Click(object sender, RoutedEventArgs e)
+    {
+        await RefreshDiagnosticsAsync();
+    }
+
+    private async void RepairDiagnostics_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            await _runtime.DiagnosticsViewModel.RepairAsync();
+            UpdateHomeState();
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog("Managed diagnostics repair failed", ex);
+        }
+    }
+
+    private void ToggleDiagnosticDetails_Click(object sender, RoutedEventArgs e)
+    {
+        DiagnosticDetails.Visibility = DiagnosticDetails.Visibility == Visibility.Visible
+            ? Visibility.Collapsed
+            : Visibility.Visible;
     }
 
     private void UpdateShellVisibility()
@@ -201,6 +241,7 @@ public partial class ManagedShellWindow : Window
         {
             _homeInitialized = false;
             _routesInitialized = false;
+            _diagnosticsInitialized = false;
         }
     }
 
@@ -213,6 +254,18 @@ public partial class ManagedShellWindow : Window
     private async Task RefreshRoutesAsync()
     {
         await RunRouteActionAsync(() => _runtime.RoutesViewModel.RefreshAsync());
+    }
+
+    private async Task RefreshDiagnosticsAsync()
+    {
+        try
+        {
+            await _runtime.DiagnosticsViewModel.RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog("Managed diagnostics refresh failed", ex);
+        }
     }
 
     private static async Task RunRouteActionAsync(Func<Task> action)

@@ -107,11 +107,14 @@ public interface IManagedCoreRunner
     Task StopAsync(CancellationToken ct = default);
 }
 
-public sealed class ServiceLibManagedCoreRunner : IManagedCoreRunner
+public sealed class ServiceLibManagedCoreRunner : IManagedCoreRunner, IManagedDiagnosticsRuntime
 {
     private readonly Func<bool, string, Task> _updateFunc;
     private IDisposable? _runtimeConfigScope;
     private Config? _activeConfig;
+    private ProxySettingWindows.WindowsProxySnapshot? _windowsProxySnapshot;
+    private bool _managedSystemProxyApplied;
+    private bool _managedTunApplied;
 
     public ServiceLibManagedCoreRunner(Func<bool, string, Task>? updateFunc = null)
     {
@@ -146,11 +149,22 @@ public sealed class ServiceLibManagedCoreRunner : IManagedCoreRunner
 
             if (mode == ManagedConnectionMode.SystemProxy)
             {
+                if (OperatingSystem.IsWindows())
+                {
+                    _windowsProxySnapshot = ProxySettingWindows.CaptureSnapshot();
+                }
+
                 var proxySet = await SysProxyHandler.UpdateSysProxy(context.AppConfig, false);
                 if (!proxySet)
                 {
                     throw new InvalidOperationException("System proxy could not be applied.");
                 }
+
+                _managedSystemProxyApplied = true;
+            }
+            else
+            {
+                _managedTunApplied = true;
             }
         }
         catch
@@ -163,22 +177,109 @@ public sealed class ServiceLibManagedCoreRunner : IManagedCoreRunner
     public async Task StopAsync(CancellationToken ct = default)
     {
         var activeConfig = _activeConfig;
+        Exception? restoreError = null;
 
-        if (activeConfig != null)
+        if (activeConfig != null && _managedSystemProxyApplied)
         {
-            await SysProxyHandler.UpdateSysProxy(activeConfig, true);
+            try
+            {
+                await RestoreSystemProxySnapshotAsync(activeConfig);
+                _managedSystemProxyApplied = false;
+            }
+            catch (Exception ex)
+            {
+                restoreError = ex;
+            }
         }
 
         await CoreManager.Instance.CoreStop();
 
-        if (activeConfig?.TunModeItem.EnableTun == true)
+        if (activeConfig?.TunModeItem.EnableTun == true && _managedTunApplied)
         {
             await AppManager.Instance.RemoveTunDeviceAsync();
+            _managedTunApplied = false;
         }
 
+        ResetManagedRuntime();
+        if (restoreError != null)
+        {
+            throw new InvalidOperationException("Managed system proxy snapshot could not be restored.", restoreError);
+        }
+    }
+
+    public ManagedCoreRuntimeSnapshot Inspect()
+        => new()
+        {
+            IsRunning = IsRunning,
+            HasManagedRuntime = _activeConfig != null,
+            HasManagedSystemProxy = _managedSystemProxyApplied,
+            HasManagedTun = _managedTunApplied,
+        };
+
+    public Task ClearResidualCoreAsync(CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        return CoreManager.Instance.CoreStop();
+    }
+
+    public async Task RestoreManagedSystemProxyAsync(CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (!_managedSystemProxyApplied || _activeConfig == null)
+        {
+            return;
+        }
+
+        await RestoreSystemProxySnapshotAsync(_activeConfig);
+        _managedSystemProxyApplied = false;
+        ResetManagedRuntimeIfClean();
+    }
+
+    public async Task ClearManagedTunStateAsync(CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (!_managedTunApplied)
+        {
+            return;
+        }
+
+        if (IsRunning)
+        {
+            throw new InvalidOperationException("Cannot clear managed TUN while the core is running.");
+        }
+
+        await AppManager.Instance.RemoveTunDeviceAsync();
+        _managedTunApplied = false;
+        ResetManagedRuntimeIfClean();
+    }
+
+    private void ResetManagedRuntimeIfClean()
+    {
+        if (!IsRunning && !_managedSystemProxyApplied && !_managedTunApplied)
+        {
+            ResetManagedRuntime();
+        }
+    }
+
+    private void ResetManagedRuntime()
+    {
         _activeConfig = null;
+        _windowsProxySnapshot = null;
+        _managedSystemProxyApplied = false;
+        _managedTunApplied = false;
         _runtimeConfigScope?.Dispose();
         _runtimeConfigScope = null;
+    }
+
+    private async Task RestoreSystemProxySnapshotAsync(Config activeConfig)
+    {
+        if (OperatingSystem.IsWindows() && _windowsProxySnapshot != null)
+        {
+            ProxySettingWindows.RestoreSnapshot(_windowsProxySnapshot);
+            return;
+        }
+
+        await SysProxyHandler.UpdateSysProxy(activeConfig, true);
     }
 }
 

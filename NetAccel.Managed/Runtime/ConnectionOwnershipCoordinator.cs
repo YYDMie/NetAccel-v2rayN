@@ -149,6 +149,14 @@ public sealed class ConnectionOwnershipCoordinator : IAsyncDisposable
 
     public ConnectionOwner CurrentOwner => _currentOwner;
 
+    public async Task<ConnectionOwnershipSnapshot?> InspectAsync(CancellationToken ct = default)
+    {
+        var snapshot = await _store.ReadAsync(ct);
+        return snapshot is { Owner: not ConnectionOwner.None } && IsSnapshotLive(snapshot)
+            ? snapshot
+            : null;
+    }
+
     public async Task<ConnectionOwnershipAcquireResult> AcquireAsync(ConnectionOwner owner, CancellationToken ct = default)
     {
         if (owner == ConnectionOwner.None)

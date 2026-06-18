@@ -31,7 +31,8 @@ public sealed class ManagedClientRuntime : IDisposable
         ManagedLoginViewModel loginViewModel,
         ManagedHomeViewModel homeViewModel,
         ManagedRoutesViewModel routesViewModel,
-        ManagedActivityViewModel activityViewModel)
+        ManagedActivityViewModel activityViewModel,
+        ManagedDiagnosticsViewModel diagnosticsViewModel)
     {
         _api = api;
         _vault = vault;
@@ -41,12 +42,14 @@ public sealed class ManagedClientRuntime : IDisposable
         HomeViewModel = homeViewModel;
         RoutesViewModel = routesViewModel;
         ActivityViewModel = activityViewModel;
+        DiagnosticsViewModel = diagnosticsViewModel;
     }
 
     public ManagedLoginViewModel LoginViewModel { get; }
     public ManagedHomeViewModel HomeViewModel { get; }
     public ManagedRoutesViewModel RoutesViewModel { get; }
     public ManagedActivityViewModel ActivityViewModel { get; }
+    public ManagedDiagnosticsViewModel DiagnosticsViewModel { get; }
 
     public static ManagedClientRuntime Create()
     {
@@ -78,22 +81,24 @@ public sealed class ManagedClientRuntime : IDisposable
             new Dictionary<string, string>(),
             CreateCapabilities());
         var ownership = new ConnectionOwnershipCoordinator();
+        var coreRunner = new ServiceLibManagedCoreRunner((show, message) =>
+        {
+            if (!string.IsNullOrWhiteSpace(message))
+            {
+                Logging.SaveLog(message);
+            }
+
+            return Task.CompletedTask;
+        });
         var connection = new ManagedConnectionCoordinator(
             ownership,
-            new ServiceLibManagedCoreRunner((show, message) =>
-            {
-                if (!string.IsNullOrWhiteSpace(message))
-                {
-                    Logging.SaveLog(message);
-                }
-
-                return Task.CompletedTask;
-            }),
+            coreRunner,
             selectionService: selection,
             configService: config,
             clientVersion: Utils.GetVersionInfo(),
             coreVersions: new Dictionary<string, string>());
 
+        var login = new ManagedLoginViewModel(auth, startup);
         var home = new ManagedHomeViewModel(connection, startup.GetCurrentConfigAsync);
         var routes = new ManagedRoutesViewModel(
             selection,
@@ -101,16 +106,28 @@ public sealed class ManagedClientRuntime : IDisposable
             startup.GetCurrentConfigAsync,
             connection.SwitchAsync,
             home.UpdateSelectionPreference);
+        var diagnostics = new ManagedDiagnosticsService(
+            connection,
+            coreRunner,
+            ownership,
+            () => login.IsReady,
+            startup.GetCurrentConfigAsync,
+            async ct =>
+            {
+                await login.RetryAsync(ct);
+                return login.IsReady;
+            });
 
         return new ManagedClientRuntime(
             api,
             vault,
             ownership,
             connection,
-            new ManagedLoginViewModel(auth, startup),
+            login,
             home,
             routes,
-            new ManagedActivityViewModel(connection));
+            new ManagedActivityViewModel(connection),
+            new ManagedDiagnosticsViewModel(diagnostics));
     }
 
     public void Dispose()
@@ -123,6 +140,7 @@ public sealed class ManagedClientRuntime : IDisposable
         _disposed = true;
         RoutesViewModel.Dispose();
         ActivityViewModel.Dispose();
+        DiagnosticsViewModel.Dispose();
         HomeViewModel.Dispose();
         LoginViewModel.Dispose();
         Task.Run(async () =>

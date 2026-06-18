@@ -331,6 +331,93 @@
                             </controls:BubbleCard>
                         </StackPanel>
 
+                        <StackPanel
+                            x:Name="DiagnosticsSection"
+                            Visibility="Collapsed">
+                            <UniformGrid Columns="2" Rows="2">
+                                <controls:BubbleCard
+                                    Margin="0,0,8,8"
+                                    Description="{Binding ServiceConnection.Detail}"
+                                    Title="{Binding ServiceConnection.Title}">
+                                    <controls:StatusBubble
+                                        HorizontalAlignment="Left"
+                                        Text="状态"
+                                        Value="{Binding ServiceConnection.Status}" />
+                                </controls:BubbleCard>
+                                <controls:BubbleCard
+                                    Margin="8,0,0,8"
+                                    Description="{Binding CurrentRoute.Detail}"
+                                    Title="{Binding CurrentRoute.Title}">
+                                    <controls:StatusBubble
+                                        HorizontalAlignment="Left"
+                                        Text="状态"
+                                        Value="{Binding CurrentRoute.Status}" />
+                                </controls:BubbleCard>
+                                <controls:BubbleCard
+                                    Margin="0,8,8,0"
+                                    Description="{Binding LocalNetwork.Detail}"
+                                    Title="{Binding LocalNetwork.Title}">
+                                    <controls:StatusBubble
+                                        HorizontalAlignment="Left"
+                                        Text="状态"
+                                        Value="{Binding LocalNetwork.Status}" />
+                                </controls:BubbleCard>
+                                <controls:BubbleCard
+                                    Margin="8,8,0,0"
+                                    Description="{Binding AccelerationEngine.Detail}"
+                                    Title="{Binding AccelerationEngine.Title}">
+                                    <controls:StatusBubble
+                                        HorizontalAlignment="Left"
+                                        Text="状态"
+                                        Value="{Binding AccelerationEngine.Status}" />
+                                </controls:BubbleCard>
+                            </UniformGrid>
+
+                            <controls:BubbleCard
+                                Margin="0,16,0,0"
+                                Description="自动修复只处理托管核心、托管代理、托管 TUN 和当前有效配置。"
+                                Title="安全修复">
+                                <StackPanel>
+                                    <WrapPanel>
+                                        <controls:PillButton
+                                            AutomationProperties.Name="重新检查诊断"
+                                            Click="RefreshDiagnostics_Click"
+                                            Content="重新检查"
+                                            IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBooleanConverter}}" />
+                                        <controls:PillButton
+                                            Margin="8,0,0,0"
+                                            AutomationProperties.Name="一键修复"
+                                            Click="RepairDiagnostics_Click"
+                                            Content="一键修复"
+                                            IsEnabled="{Binding CanRepair}" />
+                                        <controls:PillButton
+                                            Margin="8,0,0,0"
+                                            AutomationProperties.Name="打开诊断详细信息"
+                                            Click="ToggleDiagnosticDetails_Click"
+                                            Content="打开详细信息"
+                                            Style="{DynamicResource ManagedSecondaryPillButtonStyle}" />
+                                    </WrapPanel>
+                                    <Border
+                                        x:Name="DiagnosticDetails"
+                                        Margin="0,14,0,0"
+                                        Padding="14,12"
+                                        Background="{DynamicResource ManagedBrushBgBubble}"
+                                        CornerRadius="{DynamicResource ManagedRadiusMedium}"
+                                        Visibility="Collapsed">
+                                        <TextBlock
+                                            Style="{DynamicResource ManagedSecondaryTextStyle}"
+                                            Text="{Binding Summary}"
+                                            TextWrapping="Wrap" />
+                                    </Border>
+                                    <TextBlock
+                                        Margin="0,12,0,0"
+                                        Style="{DynamicResource ManagedSecondaryTextStyle}"
+                                        Text="不会删除账号、本地节点或经典订阅。"
+                                        TextWrapping="Wrap" />
+                                </StackPanel>
+                            </controls:BubbleCard>
+                        </StackPanel>
+
                         <controls:BubbleCard
                             x:Name="PlaceholderSection"
                             Description="页面结构已经预留，具体功能将在后续 R3 子任务中接入。"

@@ -17,7 +17,7 @@ public static class SysProxyHandler
         {
             var port = AppManager.Instance.GetLocalPort(EInboundProtocol.socks);
             var exceptions = config.SystemProxyItem.SystemProxyExceptions.Replace(" ", "");
-            if (port <= 0)
+            if (port <= 0 && type is ESysProxyType.ForcedChange or ESysProxyType.Pac)
             {
                 return false;
             }

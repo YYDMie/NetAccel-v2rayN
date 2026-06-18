@@ -1,3 +1,4 @@
+using Microsoft.Win32;
 using static ServiceLib.Handler.SysProxy.ProxySettingWindows.InternetConnectionOption;
 
 namespace ServiceLib.Handler.SysProxy;
@@ -6,6 +7,42 @@ namespace ServiceLib.Handler.SysProxy;
 public static class ProxySettingWindows
 {
     private const string _regPath = @"Software\Microsoft\Windows\CurrentVersion\Internet Settings";
+    private static readonly string[] SnapshotValueNames =
+    [
+        "ProxyEnable",
+        "ProxyServer",
+        "ProxyOverride",
+        "AutoConfigURL",
+    ];
+
+    public sealed record WindowsProxySnapshot(IReadOnlyDictionary<string, object?> Values);
+
+    public static WindowsProxySnapshot CaptureSnapshot()
+    {
+        using var key = Registry.CurrentUser.OpenSubKey(_regPath, false);
+        var values = SnapshotValueNames.ToDictionary(
+            name => name,
+            name => key?.GetValue(name, null, RegistryValueOptions.DoNotExpandEnvironmentNames),
+            StringComparer.Ordinal);
+        return new WindowsProxySnapshot(values);
+    }
+
+    public static void RestoreSnapshot(WindowsProxySnapshot snapshot)
+    {
+        using var key = Registry.CurrentUser.CreateSubKey(_regPath);
+        foreach (var name in SnapshotValueNames)
+        {
+            if (!snapshot.Values.TryGetValue(name, out var value) || value == null)
+            {
+                key?.DeleteValue(name, false);
+                continue;
+            }
+
+            key?.SetValue(name, value);
+        }
+
+        NotifySystemProxyChanged();
+    }
 
     private static bool SetProxyFallback(string? strProxy, string? exceptions, int type)
     {
@@ -31,6 +68,20 @@ public static class ProxySettingWindows
             WindowsUtils.RegWriteValue(_regPath, "AutoConfigURL", strProxy ?? string.Empty);
         }
         return true;
+    }
+
+    private static void NotifySystemProxyChanged()
+    {
+        _ = NativeMethods.InternetSetOption(
+            nint.Zero,
+            InternetOption.INTERNET_OPTION_SETTINGS_CHANGED,
+            nint.Zero,
+            0);
+        _ = NativeMethods.InternetSetOption(
+            nint.Zero,
+            InternetOption.INTERNET_OPTION_REFRESH,
+            nint.Zero,
+            0);
     }
 
     /// <summary>
@@ -169,8 +220,7 @@ public static class ProxySettingWindows
         else
         {
             // Notify the system that the registry settings have been changed and cause them to be refreshed
-            _ = NativeMethods.InternetSetOption(nint.Zero, InternetOption.INTERNET_OPTION_SETTINGS_CHANGED, nint.Zero, 0);
-            _ = NativeMethods.InternetSetOption(nint.Zero, InternetOption.INTERNET_OPTION_REFRESH, nint.Zero, 0);
+            NotifySystemProxyChanged();
         }
 
         // FREE the data ASAP
