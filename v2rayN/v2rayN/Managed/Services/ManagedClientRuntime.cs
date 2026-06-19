@@ -11,10 +11,13 @@ using NetAccel.Managed.Selection;
 using NetAccel.Managed.Session;
 using NetAccel.Managed.Settings;
 using NetAccel.Managed.Startup;
+using NetAccel.Managed.Update;
 using NetAccel.Managed.Vault;
 using ServiceLib.Common;
 using ServiceLib.Handler;
 using System.Net.Http;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace v2rayN.Managed.Services;
 
@@ -174,7 +177,60 @@ public sealed class ManagedClientRuntime : IDisposable
                 await login.ReturnToLoginAsync(ct);
             },
             classicLauncher.TryHandoffToClassicAsync,
-            coreRunner.RestoreManagedSystemProxyAsync);
+            coreRunner.RestoreManagedSystemProxyAsync,
+            async ct =>
+            {
+                var masterOrigin = new Uri(GetApiBaseUrl());
+                var trust = new DirectoryManagedReleaseTrustStore(
+                    Path.Combine(Utils.StartupPath(), "release-trust"));
+                var updateClient = new ManagedUpdateClient(http, new ManagedReleaseVerifier(trust), masterOrigin);
+                var stage = await updateClient.StageLatestAsync(
+                    "windows",
+                    RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "aarch64" : "x86_64",
+                    "stable",
+                    Path.Combine(Path.GetTempPath(), "NetAccel", "update-staging"),
+                    ct);
+                if (!stage.Success || stage.Update == null)
+                {
+                    return $"更新未安装：{stage.ErrorCode}";
+                }
+
+                var installer = new ManagedVersionedInstaller(
+                    Path.Combine(Path.GetTempPath(), "NetAccel", "prepared-updates"));
+                var prepared = await installer.PrepareAsync(
+                    stage.Update,
+                    Utils.GetVersionInfo(),
+                    DateTimeOffset.UtcNow,
+                    TimeSpan.FromMinutes(2),
+                    ct);
+                if (!prepared.Success || prepared.LaunchDirectory == null)
+                {
+                    return $"更新未安装：{prepared.ErrorCode}";
+                }
+
+                if (connection.Status.State is ManagedConnectionState.Connected
+                    or ManagedConnectionState.Starting
+                    or ManagedConnectionState.Stopping
+                    or ManagedConnectionState.Faulted)
+                {
+                    await connection.StopAsync(ct);
+                }
+
+                var handoff = await new ManagedUpdateHandoff().LaunchAsync(
+                    Path.Combine(Utils.StartupPath(), "updater"),
+                    prepared.LaunchDirectory,
+                    Utils.StartupPath(),
+                    stage.Update.Manifest.Version,
+                    Process.GetCurrentProcess().Id,
+                    ct);
+                if (!handoff.Success)
+                {
+                    return $"更新未安装：{handoff.ErrorCode}";
+                }
+
+                _ = Application.Current.Dispatcher.BeginInvoke(Application.Current.Shutdown);
+                return "更新已验证，正在安全重启";
+            });
 
         return new ManagedClientRuntime(
             api,

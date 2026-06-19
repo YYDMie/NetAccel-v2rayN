@@ -38,11 +38,22 @@
 		<Resource Include="Resources\NotifyIcon3.ico" />
 		<Resource Include="Resources\NotifyIcon4.ico" />
 		<Resource Include="Resources\NetAccel.ico" />
+		<None Include="release-trust\*.pem" CopyToOutputDirectory="PreserveNewest" TargetPath="release-trust\%(Filename)%(Extension)" />
 	</ItemGroup>
 
 	<ItemGroup>
 		<ProjectReference Include="..\..\NetAccel.Managed\NetAccel.Managed.csproj" />
+		<ProjectReference Include="..\..\NetAccel.Updater\NetAccel.Updater.csproj" ReferenceOutputAssembly="false" />
 		<ProjectReference Include="..\ServiceLib\ServiceLib.csproj" />
 	</ItemGroup>
+
+	<Target Name="CopyNetAccelUpdater" AfterTargets="Build">
+		<ItemGroup>
+			<NetAccelUpdaterFiles Include="..\..\NetAccel.Updater\bin\$(Configuration)\net10.0-windows\**\*" />
+		</ItemGroup>
+		<Copy SourceFiles="@(NetAccelUpdaterFiles)"
+			DestinationFiles="@(NetAccelUpdaterFiles->'$(OutDir)updater\%(RecursiveDir)%(Filename)%(Extension)')"
+			SkipUnchangedFiles="true" />
+	</Target>
 
 </Project>

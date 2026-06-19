@@ -23,4 +23,5 @@
   <Project Path="v2rayN/v2rayN.csproj" />
   <Project Path="../NetAccel.Managed/NetAccel.Managed.csproj" />
   <Project Path="../NetAccel.Managed.Tests/NetAccel.Managed.Tests.csproj" />
+  <Project Path="../NetAccel.Updater/NetAccel.Updater.csproj" />
 </Solution>

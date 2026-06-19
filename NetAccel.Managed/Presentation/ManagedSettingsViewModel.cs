@@ -14,6 +14,7 @@ public sealed class ManagedSettingsViewModel : INotifyPropertyChanged
     private readonly Func<CancellationToken, Task> _logout;
     private readonly Func<CancellationToken, Task<ClassicModeHandoffResult>> _classicHandoff;
     private readonly Func<CancellationToken, Task> _restoreSystemProxy;
+    private readonly Func<CancellationToken, Task<string>>? _runSecureUpdate;
     private readonly SemaphoreSlim _operationGate = new(1, 1);
     private bool _autoRun;
     private bool _autoConnect;
@@ -25,6 +26,7 @@ public sealed class ManagedSettingsViewModel : INotifyPropertyChanged
     private string _accountText = "当前账号";
     private string _lastSyncText = "尚未同步";
     private string _summary = "设置会保存在当前 Windows 用户的 NetAccel 数据目录中。";
+    private string _updateText = "尚未检查";
 
     public ManagedSettingsViewModel(
         IManagedPreferencesStore preferencesStore,
@@ -33,7 +35,8 @@ public sealed class ManagedSettingsViewModel : INotifyPropertyChanged
         Func<CancellationToken, Task<int?>> accountIdProvider,
         Func<CancellationToken, Task> logout,
         Func<CancellationToken, Task<ClassicModeHandoffResult>> classicHandoff,
-        Func<CancellationToken, Task> restoreSystemProxy)
+        Func<CancellationToken, Task> restoreSystemProxy,
+        Func<CancellationToken, Task<string>>? runSecureUpdate = null)
     {
         _preferencesStore = preferencesStore;
         _autoRunProvider = autoRunProvider;
@@ -42,6 +45,7 @@ public sealed class ManagedSettingsViewModel : INotifyPropertyChanged
         _logout = logout;
         _classicHandoff = classicHandoff;
         _restoreSystemProxy = restoreSystemProxy;
+        _runSecureUpdate = runSecureUpdate;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -105,6 +109,12 @@ public sealed class ManagedSettingsViewModel : INotifyPropertyChanged
     {
         get => _summary;
         private set => SetProperty(ref _summary, value);
+    }
+
+    public string UpdateText
+    {
+        get => _updateText;
+        private set => SetProperty(ref _updateText, value);
     }
 
     public bool IsBusy
@@ -250,6 +260,32 @@ public sealed class ManagedSettingsViewModel : INotifyPropertyChanged
         catch
         {
             Summary = "系统代理暂时无法恢复，请打开诊断。";
+        }
+        finally
+        {
+            ExitOperation();
+        }
+    }
+
+    public async Task CheckAndInstallUpdateAsync(CancellationToken ct = default)
+    {
+        if (_runSecureUpdate == null || !await TryEnterAsync(ct))
+        {
+            return;
+        }
+
+        try
+        {
+            UpdateText = "正在验证更新...";
+            UpdateText = await _runSecureUpdate(ct);
+        }
+        catch (OperationCanceledException)
+        {
+            UpdateText = "更新已取消";
+        }
+        catch
+        {
+            UpdateText = "安全更新失败，当前版本未改变";
         }
         finally
         {

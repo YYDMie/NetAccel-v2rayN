@@ -234,6 +234,11 @@ public partial class ManagedShellWindow : Window
         }
     }
 
+    private async void InstallUpdate_Click(object sender, RoutedEventArgs e)
+    {
+        await _runtime.SettingsViewModel.CheckAndInstallUpdateAsync();
+    }
+
     private void OnProgramStarted(object? state, bool timedOut)
     {
         Dispatcher.InvokeAsync(ShowActiveWindow);

@@ -56,6 +56,48 @@ public partial class App : Application
         var managedWindow = new Managed.Views.ManagedShellWindow();
         MainWindow = managedWindow;
         managedWindow.Show();
+
+        var healthMarker = GetUpdateHealthMarker(e.Args);
+        if (!string.IsNullOrWhiteSpace(healthMarker))
+        {
+            try
+            {
+                var markerPath = Path.GetFullPath(healthMarker);
+                Directory.CreateDirectory(Path.GetDirectoryName(markerPath)!);
+                File.WriteAllText(markerPath, DateTimeOffset.UtcNow.ToString("O"));
+            }
+            catch (Exception ex)
+            {
+                Logging.SaveLog("Update health marker failed", ex);
+            }
+        }
+    }
+
+    private static string? GetArgumentValue(IReadOnlyList<string> args, string name)
+    {
+        for (var i = 0; i + 1 < args.Count; i++)
+        {
+            if (string.Equals(args[i], name, StringComparison.Ordinal))
+            {
+                return args[i + 1];
+            }
+        }
+        return null;
+    }
+
+    private static string? GetUpdateHealthMarker(IReadOnlyList<string> args)
+    {
+        var value = GetArgumentValue(args, "--netaccel-update-health-marker");
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+        var root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "NetAccel", "updater"))
+            + Path.DirectorySeparatorChar;
+        var candidate = Path.GetFullPath(value);
+        return candidate.StartsWith(root, StringComparison.OrdinalIgnoreCase)
+            ? candidate
+            : null;
     }
 
     private void App_DispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)

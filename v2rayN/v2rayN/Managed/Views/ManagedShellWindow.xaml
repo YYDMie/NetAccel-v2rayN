@@ -545,7 +545,7 @@
 
                             <controls:BubbleCard
                                 Margin="0,16,0,0"
-                                Description="NetAccel 更新器将在 R4 安全更新模块中启用。"
+                                Description="仅安装通过 NetAccel 发布签名和 SHA-256 校验的更新。"
                                 Title="更新">
                                 <StackPanel>
                                     <controls:StatusBubble
@@ -558,6 +558,18 @@
                                         HorizontalAlignment="Left"
                                         Text="更新渠道"
                                         Value="stable" />
+                                    <controls:StatusBubble
+                                        Margin="0,8,0,0"
+                                        HorizontalAlignment="Left"
+                                        Text="更新状态"
+                                        Value="{Binding UpdateText}" />
+                                    <controls:PillButton
+                                        Margin="0,14,0,0"
+                                        HorizontalAlignment="Left"
+                                        AutomationProperties.Name="检查并安装安全更新"
+                                        Click="InstallUpdate_Click"
+                                        Content="检查更新"
+                                        IsEnabled="{Binding CanAct}" />
                                 </StackPanel>
                             </controls:BubbleCard>
 
