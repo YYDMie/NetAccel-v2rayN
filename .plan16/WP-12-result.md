@@ -48,6 +48,8 @@ WP-12 implements T16-R4-11 through T16-R4-17:
 - Plan 16 cumulative boundary checker: pass.
 - Secret-pattern gate: pass.
 - SPDX SBOM generation: pass.
+- Release package structure gate: pass for the WPF executable, external
+  updater, and public trust anchor; private signing material is rejected.
 - Client `git diff --check`: pass.
 
 ## R5 Evidence Remaining

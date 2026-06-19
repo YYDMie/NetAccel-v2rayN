@@ -49,6 +49,9 @@ jobs:
           $trust = Join-Path 'artifacts/wpf/release-trust' ($env:NETACCEL_RELEASE_SIGNING_KEY_ID + '.pem')
           New-Item -ItemType Directory -Force (Split-Path $trust) | Out-Null
           [IO.File]::WriteAllText((Resolve-Path (Split-Path $trust)).Path + '\' + (Split-Path $trust -Leaf), $env:NETACCEL_RELEASE_PUBLIC_KEY_PEM, [Text.UTF8Encoding]::new($false))
+          ./scripts/plan16/verify-release-package.ps1 `
+            -PublishDirectory artifacts/wpf `
+            -ReleaseKeyId $env:NETACCEL_RELEASE_SIGNING_KEY_ID
           Compress-Archive -Path artifacts/wpf/* -DestinationPath "artifacts/netaccel-${{ inputs.version }}-windows-x86_64.zip"
       - name: Sign release manifest
         shell: powershell
