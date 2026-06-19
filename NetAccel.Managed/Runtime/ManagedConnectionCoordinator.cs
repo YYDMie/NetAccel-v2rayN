@@ -3,6 +3,7 @@ using NetAccel.Managed.Api;
 using NetAccel.Managed.Domain;
 using NetAccel.Managed.Dto;
 using NetAccel.Managed.Selection;
+using NetAccel.Managed.Session;
 using ServiceLib.Common;
 using ServiceLib.Enums;
 using ServiceLib.Handler.SysProxy;
@@ -48,6 +49,7 @@ public enum ManagedConnectionFailureKind
     CoreStartFailed,
     SelectionRejected,
     RestoreFailed,
+    SessionRejected,
     Cancelled,
     Unknown,
 }
@@ -298,6 +300,7 @@ public sealed class ManagedConnectionCoordinator : IManagedConnectionCoordinator
     private readonly ManagedRuntimeConfigBuilder _runtimeBuilder;
     private readonly IManagedSelectionService? _selectionService;
     private readonly IManagedConfigService? _configService;
+    private readonly IManagedSessionReporter? _sessionReporter;
     private readonly string _clientVersion;
     private readonly Dictionary<string, string> _coreVersions;
     private readonly Func<string, Task>? _logAsync;
@@ -312,6 +315,7 @@ public sealed class ManagedConnectionCoordinator : IManagedConnectionCoordinator
         ManagedRuntimeConfigBuilder? runtimeBuilder = null,
         IManagedSelectionService? selectionService = null,
         IManagedConfigService? configService = null,
+        IManagedSessionReporter? sessionReporter = null,
         string clientVersion = "",
         Dictionary<string, string>? coreVersions = null,
         Func<string, Task>? logAsync = null)
@@ -321,6 +325,7 @@ public sealed class ManagedConnectionCoordinator : IManagedConnectionCoordinator
         _runtimeBuilder = runtimeBuilder ?? new ManagedRuntimeConfigBuilder();
         _selectionService = selectionService;
         _configService = configService;
+        _sessionReporter = sessionReporter;
         _clientVersion = clientVersion;
         _coreVersions = coreVersions ?? [];
         _logAsync = logAsync;
@@ -389,7 +394,13 @@ public sealed class ManagedConnectionCoordinator : IManagedConnectionCoordinator
                 var persisted = await PersistSelectionAsync(request, active.Connection, ct);
                 if (!persisted.Success)
                 {
-                    await CleanupAfterFailedStartAsync(lease, ct);
+                    await SafeStopCoreAsync();
+                    await FailSessionAsync(
+                        active.Connection,
+                        ManagedSessionReason.StartFailed,
+                        ManagedSessionEventCode.SessionCreateFailed,
+                        CancellationToken.None);
+                    await lease.DisposeAsync();
                     SetStatus(new ManagedConnectionStatus
                     {
                         State = ManagedConnectionState.Faulted,
@@ -464,6 +475,11 @@ public sealed class ManagedConnectionCoordinator : IManagedConnectionCoordinator
 
             SetStatus(_status with { State = ManagedConnectionState.Stopping });
             await StopActiveCoreAsync(CancellationToken.None);
+            await CloseSessionAsync(
+                _active,
+                ManagedSessionReason.UserDisconnect,
+                ManagedSessionEventCode.Closed,
+                CancellationToken.None);
             await _active.Lease.DisposeAsync();
             _active = null;
             SetStatus(new ManagedConnectionStatus { State = ManagedConnectionState.Ready });
@@ -533,6 +549,11 @@ public sealed class ManagedConnectionCoordinator : IManagedConnectionCoordinator
                 var restored = await RestorePreviousAsync(previous, CancellationToken.None);
                 if (!restored)
                 {
+                    await FailSessionAsync(
+                        previous,
+                        ManagedSessionReason.StartFailed,
+                        ManagedSessionEventCode.EngineStartFailed,
+                        CancellationToken.None);
                     await previous.Lease.DisposeAsync();
                     _active = null;
                     SetStatus(new ManagedConnectionStatus
@@ -555,9 +576,19 @@ public sealed class ManagedConnectionCoordinator : IManagedConnectionCoordinator
                 if (!persisted.Success)
                 {
                     await StopActiveCoreAsync(CancellationToken.None);
+                    await FailSessionAsync(
+                        active.Connection,
+                        ManagedSessionReason.StartFailed,
+                        ManagedSessionEventCode.SessionCreateFailed,
+                        CancellationToken.None);
                     var restored = await RestorePreviousAsync(previous, CancellationToken.None);
                     if (!restored)
                     {
+                        await FailSessionAsync(
+                            previous,
+                            ManagedSessionReason.StartFailed,
+                            ManagedSessionEventCode.EngineStartFailed,
+                            CancellationToken.None);
                         await previous.Lease.DisposeAsync();
                         _active = null;
                         SetStatus(new ManagedConnectionStatus
@@ -577,6 +608,12 @@ public sealed class ManagedConnectionCoordinator : IManagedConnectionCoordinator
 
             await ReportAppliedAsync(active.Connection.Payload.AssignmentRevision, ct);
 
+            await CloseSessionAsync(
+                previous,
+                ManagedSessionReason.RouteSwitch,
+                ManagedSessionEventCode.Closed,
+                CancellationToken.None);
+
             _active = active.Connection;
             SetConnectedStatus(_active);
             return ManagedConnectionResult.FromStatus(_status);
@@ -594,6 +631,11 @@ public sealed class ManagedConnectionCoordinator : IManagedConnectionCoordinator
                     return Failure(_status, ManagedConnectionFailureKind.Cancelled, "switch_cancelled_restored_previous");
                 }
 
+                await FailSessionAsync(
+                    previous,
+                    ManagedSessionReason.StartFailed,
+                    ManagedSessionEventCode.EngineStartFailed,
+                    CancellationToken.None);
                 await previous.Lease.DisposeAsync();
                 _active = null;
                 SetStatus(new ManagedConnectionStatus
@@ -637,6 +679,12 @@ public sealed class ManagedConnectionCoordinator : IManagedConnectionCoordinator
             {
                 return ManagedConnectionResult.FromStatus(_status);
             }
+
+            await FailSessionAsync(
+                _active,
+                ManagedSessionReason.CoreExited,
+                NormalizeFailureCode(reason),
+                CancellationToken.None);
 
             if (_active.Payload.ClientPolicy?.AllowAutomaticFailover != true)
             {
@@ -749,11 +797,52 @@ public sealed class ManagedConnectionCoordinator : IManagedConnectionCoordinator
         ConnectionOwnershipLease lease,
         CancellationToken ct)
     {
+        ManagedSessionHandle? session = null;
         try
         {
+            if (_sessionReporter != null)
+            {
+                var created = await _sessionReporter.CreateAsync(
+                    profile.Id,
+                    request.NetworkMode == ManagedConnectionMode.Tun ? "tun" : "http",
+                    DateTimeOffset.UtcNow,
+                    ct,
+                    request.Payload.SelectionRevision,
+                    preferredProfileId,
+                    isFallback);
+                if (!created.Accepted || created.Handle == null)
+                {
+                    return StartActiveResult.Failed(
+                        ManagedConnectionFailureKind.SessionRejected,
+                        created.ErrorCode ?? ManagedSessionEventCode.SessionCreateFailed);
+                }
+
+                session = created.Handle;
+            }
+
             var runtime = _runtimeBuilder.Build(request.Payload, profile.Id);
             runtime = runtime with { EnableTun = request.NetworkMode == ManagedConnectionMode.Tun };
             await _coreRunner.StartAsync(runtime, request.NetworkMode, ct);
+
+            if (_sessionReporter != null && session != null)
+            {
+                var activated = await _sessionReporter.ActivateAsync(
+                    session,
+                    new ManagedQualityTarget(profile.Endpoint.Host, profile.Endpoint.Port),
+                    ct);
+                if (!activated.Accepted)
+                {
+                    await SafeStopCoreAsync();
+                    await _sessionReporter.FailAsync(
+                        session,
+                        ManagedSessionReason.StartFailed,
+                        activated.ErrorCode ?? ManagedSessionEventCode.SessionCreateFailed,
+                        ct: CancellationToken.None);
+                    return StartActiveResult.Failed(
+                        ManagedConnectionFailureKind.SessionRejected,
+                        activated.ErrorCode ?? ManagedSessionEventCode.SessionCreateFailed);
+                }
+            }
 
             return StartActiveResult.Started(new ActiveConnection(
                 request.Payload,
@@ -763,12 +852,33 @@ public sealed class ManagedConnectionCoordinator : IManagedConnectionCoordinator
                 profile.Id,
                 runtime,
                 isFallback,
-                lease));
+                lease,
+                session));
+        }
+        catch (OperationCanceledException)
+        {
+            if (_sessionReporter != null && session != null)
+            {
+                await _sessionReporter.FailAsync(
+                    session,
+                    ManagedSessionReason.Cancelled,
+                    ManagedSessionEventCode.ConnectCancelled,
+                    ct: CancellationToken.None);
+            }
+            throw;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             await LogAsync($"Managed profile start failed: {profile.Id} {ex.GetType().Name}");
             await SafeStopCoreAsync();
+            if (_sessionReporter != null && session != null)
+            {
+                await _sessionReporter.FailAsync(
+                    session,
+                    ManagedSessionReason.StartFailed,
+                    ManagedSessionEventCode.EngineStartFailed,
+                    ct: CancellationToken.None);
+            }
             return StartActiveResult.Failed(ManagedConnectionFailureKind.CoreStartFailed, ex.Message);
         }
     }
@@ -975,6 +1085,56 @@ public sealed class ManagedConnectionCoordinator : IManagedConnectionCoordinator
         await lease.DisposeAsync();
     }
 
+    private async Task CloseSessionAsync(
+        ActiveConnection active,
+        string reason,
+        string code,
+        CancellationToken ct)
+    {
+        if (_sessionReporter == null || active.Session == null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _sessionReporter.CloseAsync(active.Session, reason, code, ct: ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            await LogAsync($"Managed session close failed: {ex.GetType().Name}");
+        }
+    }
+
+    private async Task FailSessionAsync(
+        ActiveConnection active,
+        string reason,
+        string code,
+        CancellationToken ct)
+    {
+        if (_sessionReporter == null || active.Session == null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _sessionReporter.FailAsync(active.Session, reason, code, ct: ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            await LogAsync($"Managed session failure report failed: {ex.GetType().Name}");
+        }
+    }
+
+    private static string NormalizeFailureCode(string reason)
+        => reason switch
+        {
+            ManagedSessionEventCode.EngineExited => ManagedSessionEventCode.EngineExited,
+            ManagedSessionEventCode.ProxyCleanupFailed => ManagedSessionEventCode.ProxyCleanupFailed,
+            _ => ManagedSessionEventCode.EngineExited,
+        };
+
     private void SetConnectedStatus(
         ActiveConnection active,
         ManagedConnectionFailureKind failureKind = ManagedConnectionFailureKind.None,
@@ -1018,7 +1178,8 @@ public sealed class ManagedConnectionCoordinator : IManagedConnectionCoordinator
         string EffectiveProfileId,
         ManagedRuntimeConfig RuntimeConfig,
         bool IsFallback,
-        ConnectionOwnershipLease Lease);
+        ConnectionOwnershipLease Lease,
+        ManagedSessionHandle? Session);
 
     private sealed record StartActiveResult(
         bool Success,

@@ -3,6 +3,7 @@ using NetAccel.Managed.Api;
 using NetAccel.Managed.Dto;
 using NetAccel.Managed.Runtime;
 using NetAccel.Managed.Selection;
+using NetAccel.Managed.Session;
 using Xunit;
 
 namespace NetAccel.Managed.Tests;
@@ -321,6 +322,148 @@ public class ManagedConnectionCoordinatorTests
         Assert.Equal(new[] { "plan-a", "plan-b" }, runner.StartedProfileIds);
     }
 
+    [Fact]
+    public async Task StartAndStop_ReportSessionLifecycleAroundCore()
+    {
+        var runner = new FakeCoreRunner();
+        var sessions = new FakeSessionReporter();
+        await using var owner = NewOwner();
+        var coordinator = new ManagedConnectionCoordinator(owner, runner, sessionReporter: sessions);
+
+        var started = await coordinator.StartAsync(
+            new ManagedConnectionStartRequest { Payload = CreatePayload() },
+            TestContext.Current.CancellationToken);
+        var stopped = await coordinator.StopAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(started.Success);
+        Assert.True(stopped.Success);
+        Assert.Equal(
+            new[]
+            {
+                "create:plan-a:http",
+                "activate:plan-a",
+                "close:plan-a:user_disconnect:closed",
+            },
+            sessions.Events);
+    }
+
+    [Fact]
+    public async Task CoreStartFailureReportsFailedSessionForEveryAttempt()
+    {
+        var runner = new FakeCoreRunner();
+        runner.FailProfileIds.UnionWith(["plan-a", "plan-b"]);
+        var sessions = new FakeSessionReporter();
+        await using var owner = NewOwner();
+        var coordinator = new ManagedConnectionCoordinator(owner, runner, sessionReporter: sessions);
+
+        var result = await coordinator.StartAsync(
+            new ManagedConnectionStartRequest { Payload = CreatePayload() },
+            TestContext.Current.CancellationToken);
+
+        Assert.False(result.Success);
+        Assert.Equal(
+            new[]
+            {
+                "create:plan-a:http",
+                "fail:plan-a:start_failed:engine_start_failed",
+                "create:plan-b:http",
+                "fail:plan-b:start_failed:engine_start_failed",
+            },
+            sessions.Events);
+    }
+
+    [Fact]
+    public async Task SessionCreateRejectionPreventsCoreAndReleasesOwner()
+    {
+        var runner = new FakeCoreRunner();
+        var sessions = new FakeSessionReporter { RejectCreate = true };
+        await using var owner = NewOwner();
+        var coordinator = new ManagedConnectionCoordinator(owner, runner, sessionReporter: sessions);
+
+        var result = await coordinator.StartAsync(
+            new ManagedConnectionStartRequest { Payload = CreatePayload(), AllowAutomaticFallback = false },
+            TestContext.Current.CancellationToken);
+
+        Assert.False(result.Success);
+        Assert.Equal(ManagedConnectionFailureKind.SessionRejected, result.FailureKind);
+        Assert.Empty(runner.StartedProfileIds);
+        Assert.Equal(ConnectionOwner.None, owner.CurrentOwner);
+    }
+
+    [Fact]
+    public async Task SelectionRejectionStopsCoreAndFailsStartingSession()
+    {
+        var runner = new FakeCoreRunner();
+        var sessions = new FakeSessionReporter();
+        var selection = new FakeSelectionService
+        {
+            Result = new SelectionResult
+            {
+                Kind = SelectionResultKind.RevisionConflict,
+                ErrorCode = ManagedErrorCode.ManagedSelectionRevisionConflict,
+            },
+        };
+        await using var owner = NewOwner();
+        var coordinator = new ManagedConnectionCoordinator(
+            owner,
+            runner,
+            selectionService: selection,
+            sessionReporter: sessions);
+
+        var result = await coordinator.StartAsync(new ManagedConnectionStartRequest
+        {
+            Payload = CreatePayload(),
+            SelectionMode = ManagedProfileSelectionMode.Manual,
+            ProfileId = "plan-a",
+            PersistSelection = true,
+            AllowAutomaticFallback = false,
+        }, TestContext.Current.CancellationToken);
+
+        Assert.False(result.Success);
+        Assert.Equal(ManagedConnectionFailureKind.SelectionRejected, result.FailureKind);
+        Assert.Equal(1, runner.StopCount);
+        Assert.Equal(ConnectionOwner.None, owner.CurrentOwner);
+        Assert.Equal(
+            new[]
+            {
+                "create:plan-a:http",
+                "activate:plan-a",
+                "fail:plan-a:start_failed:session_create_failed",
+            },
+            sessions.Events);
+    }
+
+    [Fact]
+    public async Task SuccessfulSwitchActivatesNewSessionBeforeClosingPreviousSession()
+    {
+        var runner = new FakeCoreRunner();
+        var sessions = new FakeSessionReporter();
+        await using var owner = NewOwner();
+        var coordinator = new ManagedConnectionCoordinator(owner, runner, sessionReporter: sessions);
+        var payload = CreatePayload();
+        await coordinator.StartAsync(
+            new ManagedConnectionStartRequest { Payload = payload },
+            TestContext.Current.CancellationToken);
+        sessions.Events.Clear();
+
+        var result = await coordinator.SwitchAsync(
+            payload,
+            ManagedProfileSelectionMode.Manual,
+            "plan-b",
+            persistSelection: false,
+            TestContext.Current.CancellationToken);
+
+        Assert.True(result.Success);
+        Assert.Equal(
+            new[]
+            {
+                "create:plan-b:http",
+                "activate:plan-b",
+                "close:plan-a:route_switch:closed",
+            },
+            sessions.Events);
+    }
+
     private static ConnectionOwnershipCoordinator NewOwner()
         => new(new InMemoryConnectionOwnershipStore(), useGlobalMutex: false);
 
@@ -476,5 +619,81 @@ public class ManagedConnectionCoordinatorTests
             Acks.Add((revision, status, clientVersion, coreVersions));
             return Task.FromResult(new ConfigAckResult { Kind = ConfigAckResultKind.Success });
         }
+    }
+
+    private sealed class FakeSessionReporter : IManagedSessionReporter
+    {
+        public bool RejectCreate { get; set; }
+        public List<string> Events { get; } = [];
+
+        public void StartBackgroundWork()
+        {
+        }
+
+        public Task<ManagedSessionCreateResult> CreateAsync(
+            string profileId,
+            string mode,
+            DateTimeOffset clientStartedAt,
+            CancellationToken ct = default,
+            int? selectionRevision = null,
+            string? preferredProfileId = null,
+            bool isFallback = false)
+        {
+            Events.Add($"create:{profileId}:{mode}");
+            return Task.FromResult(RejectCreate
+                ? new ManagedSessionCreateResult { ErrorCode = "managed_session_plan_not_effective" }
+                : new ManagedSessionCreateResult
+                {
+                    Accepted = true,
+                    Handle = new ManagedSessionHandle(
+                        Guid.NewGuid().ToString("D"),
+                        "550e8400-e29b-41d4-a716-446655440002",
+                        profileId,
+                        1),
+                });
+        }
+
+        public Task<ManagedSessionReportResult> ActivateAsync(
+            ManagedSessionHandle handle,
+            ManagedQualityTarget? qualityTarget,
+            CancellationToken ct = default)
+        {
+            Events.Add($"activate:{handle.ProfileId}");
+            return Task.FromResult(ManagedSessionReportResult.Delivered());
+        }
+
+        public Task<ManagedSessionReportResult> HeartbeatAsync(
+            ManagedSessionHandle handle,
+            ManagedQualityMeasurement measurement,
+            CancellationToken ct = default)
+            => Task.FromResult(ManagedSessionReportResult.Delivered());
+
+        public Task<ManagedSessionReportResult> CloseAsync(
+            ManagedSessionHandle handle,
+            string reason,
+            string code,
+            ManagedQualityMeasurement? measurement = null,
+            CancellationToken ct = default)
+        {
+            Events.Add($"close:{handle.ProfileId}:{reason}:{code}");
+            return Task.FromResult(ManagedSessionReportResult.Delivered());
+        }
+
+        public Task<ManagedSessionReportResult> FailAsync(
+            ManagedSessionHandle handle,
+            string reason,
+            string errorCode,
+            string? detail = null,
+            ManagedQualityMeasurement? measurement = null,
+            CancellationToken ct = default)
+        {
+            Events.Add($"fail:{handle.ProfileId}:{reason}:{errorCode}");
+            return Task.FromResult(ManagedSessionReportResult.Delivered());
+        }
+
+        public Task<ManagedSessionReportResult> ReplayAsync(CancellationToken ct = default)
+            => Task.FromResult(ManagedSessionReportResult.Delivered());
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 }

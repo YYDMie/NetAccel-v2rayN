@@ -15,16 +15,7 @@ namespace NetAccel.Managed.Tests;
 
 public class ManagedProfileDomainTests
 {
-    private static readonly string ContractsFixtureRoot = Path.GetFullPath(Path.Combine(
-        AppContext.BaseDirectory,
-        "..",
-        "..",
-        "..",
-        "..",
-        "..",
-        "NetAccel",
-        "contracts",
-        "fixtures"));
+    private static readonly string ContractsFixtureRoot = FindContractsFixtureRoot();
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -273,6 +264,29 @@ public class ManagedProfileDomainTests
         var path = Path.Combine(ContractsFixtureRoot, name);
         var json = File.ReadAllText(path);
         return JsonSerializer.Deserialize<ManagedConfigPayload>(json, JsonOptions)!;
+    }
+
+    private static string FindContractsFixtureRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory != null)
+        {
+            foreach (var candidate in new[]
+                     {
+                         Path.Combine(directory.FullName, "contracts", "fixtures"),
+                         Path.Combine(directory.FullName, "NetAccel", "contracts", "fixtures"),
+                     })
+            {
+                if (Directory.Exists(candidate))
+                {
+                    return candidate;
+                }
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Could not locate the NetAccel contracts fixtures.");
     }
 
     private static string GenerateXrayConfig(ManagedRuntimeConfig runtime)

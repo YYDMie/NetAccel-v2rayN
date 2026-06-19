@@ -8,6 +8,7 @@ using NetAccel.Managed.Instance;
 using NetAccel.Managed.Presentation;
 using NetAccel.Managed.Runtime;
 using NetAccel.Managed.Selection;
+using NetAccel.Managed.Session;
 using NetAccel.Managed.Settings;
 using NetAccel.Managed.Startup;
 using NetAccel.Managed.Vault;
@@ -23,6 +24,7 @@ public sealed class ManagedClientRuntime : IDisposable
     private readonly WindowsCredentialVault _vault;
     private readonly ConnectionOwnershipCoordinator _ownership;
     private readonly ManagedConnectionCoordinator _connection;
+    private readonly ManagedSessionReporter _sessionReporter;
     private readonly ClassicModeLauncher _classicLauncher;
     private bool _disposed;
 
@@ -31,6 +33,7 @@ public sealed class ManagedClientRuntime : IDisposable
         WindowsCredentialVault vault,
         ConnectionOwnershipCoordinator ownership,
         ManagedConnectionCoordinator connection,
+        ManagedSessionReporter sessionReporter,
         ManagedLoginViewModel loginViewModel,
         ManagedHomeViewModel homeViewModel,
         ManagedRoutesViewModel routesViewModel,
@@ -44,6 +47,7 @@ public sealed class ManagedClientRuntime : IDisposable
         _vault = vault;
         _ownership = ownership;
         _connection = connection;
+        _sessionReporter = sessionReporter;
         LoginViewModel = loginViewModel;
         HomeViewModel = homeViewModel;
         RoutesViewModel = routesViewModel;
@@ -92,6 +96,16 @@ public sealed class ManagedClientRuntime : IDisposable
             new Dictionary<string, string>(),
             CreateCapabilities());
         var ownership = new ConnectionOwnershipCoordinator();
+        var sessionReporter = new ManagedSessionReporter(
+            new ManagedSessionApiTransport(api, instance),
+            new FileManagedSessionOutboxStore(
+                Path.Combine(Utils.StartupPath(), "managed-runtime", "session-outbox.json")),
+            logAsync: message =>
+            {
+                Logging.SaveLog(message);
+                return Task.CompletedTask;
+            });
+        sessionReporter.StartBackgroundWork();
         var coreRunner = new ServiceLibManagedCoreRunner((show, message) =>
         {
             if (!string.IsNullOrWhiteSpace(message))
@@ -106,6 +120,7 @@ public sealed class ManagedClientRuntime : IDisposable
             coreRunner,
             selectionService: selection,
             configService: config,
+            sessionReporter: sessionReporter,
             clientVersion: Utils.GetVersionInfo(),
             coreVersions: new Dictionary<string, string>());
 
@@ -166,6 +181,7 @@ public sealed class ManagedClientRuntime : IDisposable
             vault,
             ownership,
             connection,
+            sessionReporter,
             login,
             home,
             routes,
@@ -201,6 +217,7 @@ public sealed class ManagedClientRuntime : IDisposable
             await _classicLauncher.DisposeAsync();
             await ManagedExitCleanup.RunExitCleanupAsync(_ownership, _connection);
             await _ownership.DisposeAsync();
+            await _sessionReporter.DisposeAsync();
         }).GetAwaiter().GetResult();
         ManagedExitCleanup.Unregister();
         _api.Dispose();
