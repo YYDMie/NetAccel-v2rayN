@@ -1,3 +1,5 @@
+using NetAccel.Managed.Runtime;
+
 namespace v2rayN;
 
 /// <summary>
@@ -43,6 +45,20 @@ public partial class App : Application
             UI.Show($"Loading GUI configuration file is abnormal,please restart the application{Environment.NewLine}加载GUI配置文件异常,请重启应用");
             Environment.Exit(0);
             return;
+        }
+
+        try
+        {
+            var proxyRecoveryStore = new ManagedSystemProxyRecoveryStore(
+                Path.Combine(Utils.StartupPath(), "managed-runtime", "system-proxy-recovery.json"));
+            if (proxyRecoveryStore.Recover())
+            {
+                Logging.SaveLog("[Managed] Recovered system proxy after an interrupted session.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog("[Managed] System proxy recovery failed", ex);
         }
 
         AppManager.Instance.InitComponents();

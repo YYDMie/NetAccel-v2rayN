@@ -113,15 +113,19 @@ public interface IManagedCoreRunner
 public sealed class ServiceLibManagedCoreRunner : IManagedCoreRunner, IManagedDiagnosticsRuntime
 {
     private readonly Func<bool, string, Task> _updateFunc;
+    private readonly IManagedSystemProxyRecoveryStore? _proxyRecoveryStore;
     private IDisposable? _runtimeConfigScope;
     private Config? _activeConfig;
     private ProxySettingWindows.WindowsProxySnapshot? _windowsProxySnapshot;
     private bool _managedSystemProxyApplied;
     private bool _managedTunApplied;
 
-    public ServiceLibManagedCoreRunner(Func<bool, string, Task>? updateFunc = null)
+    public ServiceLibManagedCoreRunner(
+        Func<bool, string, Task>? updateFunc = null,
+        IManagedSystemProxyRecoveryStore? proxyRecoveryStore = null)
     {
         _updateFunc = updateFunc ?? ((_, _) => Task.CompletedTask);
+        _proxyRecoveryStore = proxyRecoveryStore;
     }
 
     public bool IsRunning => CoreManager.Instance.IsCoreRunning;
@@ -129,6 +133,13 @@ public sealed class ServiceLibManagedCoreRunner : IManagedCoreRunner, IManagedDi
     public async Task StartAsync(ManagedRuntimeConfig runtimeConfig, ManagedConnectionMode mode, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
+        var initialProxySnapshot = mode == ManagedConnectionMode.SystemProxy && OperatingSystem.IsWindows()
+            ? _windowsProxySnapshot ?? ProxySettingWindows.CaptureSnapshot()
+            : null;
+        if (OperatingSystem.IsWindows() && initialProxySnapshot != null)
+        {
+            _proxyRecoveryStore?.Save(initialProxySnapshot);
+        }
         await StopAsync(ct);
 
         var effectiveRuntime = runtimeConfig with { EnableTun = mode == ManagedConnectionMode.Tun };
@@ -145,7 +156,8 @@ public sealed class ServiceLibManagedCoreRunner : IManagedCoreRunner, IManagedDi
         {
             if (mode == ManagedConnectionMode.SystemProxy && OperatingSystem.IsWindows())
             {
-                _windowsProxySnapshot = ProxySettingWindows.CaptureSnapshot();
+                _windowsProxySnapshot = initialProxySnapshot;
+                _proxyRecoveryStore?.Save(_windowsProxySnapshot!);
                 _managedSystemProxyApplied = true;
                 await _updateFunc(false, $"Managed proxy snapshot captured (enabled={SnapshotProxyEnabled(_windowsProxySnapshot)}).");
             }
@@ -285,6 +297,7 @@ public sealed class ServiceLibManagedCoreRunner : IManagedCoreRunner, IManagedDi
         if (OperatingSystem.IsWindows() && proxySnapshot != null)
         {
             ProxySettingWindows.RestoreSnapshot(proxySnapshot);
+            _proxyRecoveryStore?.Clear();
             var restored = ProxySettingWindows.CaptureSnapshot();
             await _updateFunc(false, $"Managed proxy snapshot restored (enabled={SnapshotProxyEnabled(restored)}).");
             return;

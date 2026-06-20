@@ -116,6 +116,8 @@ public sealed class ManagedClientRuntime : IDisposable
                 return Task.CompletedTask;
             });
         sessionReporter.StartBackgroundWork();
+        var proxyRecoveryStore = new ManagedSystemProxyRecoveryStore(
+            Path.Combine(Utils.StartupPath(), "managed-runtime", "system-proxy-recovery.json"));
         var coreRunner = new ServiceLibManagedCoreRunner((show, message) =>
         {
             if (!string.IsNullOrWhiteSpace(message))
@@ -124,7 +126,7 @@ public sealed class ManagedClientRuntime : IDisposable
             }
 
             return Task.CompletedTask;
-        });
+        }, proxyRecoveryStore);
         var connection = new ManagedConnectionCoordinator(
             ownership,
             coreRunner,
