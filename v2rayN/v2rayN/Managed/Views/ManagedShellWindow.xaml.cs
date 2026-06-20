@@ -264,7 +264,7 @@ public partial class ManagedShellWindow : Window
         }
         catch (Exception ex)
         {
-            Logging.SaveLog("Managed home action failed", ex);
+            Logging.SaveLog($"Managed home action failed: {ex.GetType().Name}");
         }
     }
 
@@ -316,7 +316,7 @@ public partial class ManagedShellWindow : Window
         }
         catch (Exception ex)
         {
-            Logging.SaveLog("Managed diagnostics repair failed", ex);
+            Logging.SaveLog($"Managed diagnostics repair failed: {ex.GetType().Name}");
         }
     }
 
@@ -494,7 +494,7 @@ public partial class ManagedShellWindow : Window
         }
         catch (Exception ex)
         {
-            Logging.SaveLog("Managed diagnostics refresh failed", ex);
+            Logging.SaveLog($"Managed diagnostics refresh failed: {ex.GetType().Name}");
         }
     }
 
@@ -506,7 +506,7 @@ public partial class ManagedShellWindow : Window
         }
         catch (Exception ex)
         {
-            Logging.SaveLog("Managed routes action failed", ex);
+            Logging.SaveLog($"Managed routes action failed: {ex.GetType().Name}");
         }
     }
 

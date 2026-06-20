@@ -66,7 +66,7 @@ public static class ManagedExitCleanup
             }
             catch (Exception ex)
             {
-                Logging.SaveLog("ManagedExitCleanup: managed stop error", ex);
+                Logging.SaveLog($"ManagedExitCleanup: managed stop error: {ex.GetType().Name}");
             }
         }
 
@@ -79,7 +79,7 @@ public static class ManagedExitCleanup
             }
             catch (Exception ex)
             {
-                Logging.SaveLog("ManagedExitCleanup: ownership release error", ex);
+                Logging.SaveLog($"ManagedExitCleanup: ownership release error: {ex.GetType().Name}");
             }
         }
 
@@ -90,7 +90,7 @@ public static class ManagedExitCleanup
         }
         catch (Exception ex)
         {
-            Logging.SaveLog("ManagedExitCleanup: TUN cleanup error", ex);
+            Logging.SaveLog($"ManagedExitCleanup: TUN cleanup error: {ex.GetType().Name}");
         }
     }
 
@@ -142,7 +142,7 @@ public static class ManagedExitCleanup
         }
         catch (Exception ex)
         {
-            Logging.SaveLog("ManagedExitCleanup: file cleanup error", ex);
+            Logging.SaveLog($"ManagedExitCleanup: file cleanup error: {ex.GetType().Name}");
         }
     }
 
@@ -182,7 +182,7 @@ public static class ManagedExitCleanup
         }
         catch (Exception ex)
         {
-            Logging.SaveLog("ManagedExitCleanup: database cleanup error", ex);
+            Logging.SaveLog($"ManagedExitCleanup: database cleanup error: {ex.GetType().Name}");
         }
     }
 

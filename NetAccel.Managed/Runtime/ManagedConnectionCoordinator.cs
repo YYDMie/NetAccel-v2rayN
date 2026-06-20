@@ -480,9 +480,9 @@ public sealed class ManagedConnectionCoordinator : IManagedConnectionCoordinator
             {
                 State = ManagedConnectionState.Faulted,
                 FailureKind = ManagedConnectionFailureKind.Unknown,
-                Message = ex.Message,
+                Message = "managed_start_failed",
             });
-            return Failure(_status, ManagedConnectionFailureKind.Unknown, ex.Message);
+            return Failure(_status, ManagedConnectionFailureKind.Unknown, "managed_start_failed");
         }
         finally
         {
@@ -524,9 +524,9 @@ public sealed class ManagedConnectionCoordinator : IManagedConnectionCoordinator
             {
                 State = ManagedConnectionState.Faulted,
                 FailureKind = ManagedConnectionFailureKind.Unknown,
-                Message = ex.Message,
+                Message = "managed_stop_failed",
             });
-            return Failure(_status, ManagedConnectionFailureKind.Unknown, ex.Message);
+            return Failure(_status, ManagedConnectionFailureKind.Unknown, "managed_stop_failed");
         }
         finally
         {

@@ -19,7 +19,8 @@ namespace NetAccel.Managed.Tests;
 public class ManagedStartupOrchestratorTests
 {
     private static (ManagedStartupOrchestrator Orchestrator, InMemoryCredentialVault Vault, HttpClient Http, string CacheDir, string ServerPublicKey, string ServerPrivateKey) CreateOrchestrator(
-        Func<InMemoryCredentialVault, string, string, Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>>>? handlerFactory = null)
+        Func<InMemoryCredentialVault, string, string, Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>>>? handlerFactory = null,
+        Func<string, Task>? logAsync = null)
     {
         var vault = new InMemoryCredentialVault();
         var cacheDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
@@ -50,7 +51,7 @@ public class ManagedStartupOrchestratorTests
         var orch = new ManagedStartupOrchestrator(
             auth, installation, instance, selection, configService,
             deviceKeyManager, envelopeCache, offlineRules, serverKeyProvider,
-            api, vault, "1.0.0", new(), new());
+            api, vault, "1.0.0", new(), new(), logAsync);
 
         return (orch, vault, http, cacheDir, serverPublicKey, serverPrivateKey);
     }
@@ -139,6 +140,39 @@ public class ManagedStartupOrchestratorTests
         Assert.Equal([ManagedStartupPhase.CheckingCredentials], phases);
         http.Dispose();
         Directory.Delete(cacheDir, true);
+    }
+
+    [Fact]
+    public async Task Startup_UnexpectedException_DoesNotExposeSensitiveMessage()
+    {
+        var logs = new List<string>();
+        var (orch, vault, http, cacheDir, _, _) = CreateOrchestrator(
+            (_, _, _) => (_, _) => throw new InvalidOperationException(
+                "Authorization=Bearer secret-token private.example:443"),
+            message =>
+            {
+                logs.Add(message);
+                return Task.CompletedTask;
+            });
+        await vault.StoreAsync(CredentialVaultEntry.RefreshToken, "refresh-secret");
+
+        try
+        {
+            var result = await orch.StartupAsync(TestContext.Current.CancellationToken);
+
+            Assert.Equal(ManagedStartupState.Faulted, result.State);
+            Assert.Equal("startup_failed", result.Message);
+            var log = Assert.Single(logs);
+            Assert.Contains(nameof(InvalidOperationException), log, StringComparison.Ordinal);
+            Assert.DoesNotContain("secret-token", log, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("private.example", log, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Authorization", log, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            http.Dispose();
+            Directory.Delete(cacheDir, true);
+        }
     }
 
     [Fact]

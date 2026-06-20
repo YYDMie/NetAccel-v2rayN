@@ -231,8 +231,8 @@ public sealed class ManagedStartupOrchestrator : IManagedStartupOrchestrator
         }
         catch (Exception ex)
         {
-            await LogAsync($"Startup orchestration error: {ex.GetType().Name}: {ex.Message}");
-            return new ManagedStartupResult { State = ManagedStartupState.Faulted, Message = ex.Message };
+            await LogAsync($"Startup orchestration error: {ex.GetType().Name}");
+            return new ManagedStartupResult { State = ManagedStartupState.Faulted, Message = "startup_failed" };
         }
     }
 
