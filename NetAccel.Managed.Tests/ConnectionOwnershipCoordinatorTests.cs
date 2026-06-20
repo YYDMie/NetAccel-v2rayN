@@ -119,4 +119,38 @@ public class ConnectionOwnershipCoordinatorTests
         await classic.Lease!.DisposeAsync();
         Assert.Equal(ConnectionOwner.None, coordinator.CurrentOwner);
     }
+
+    [Fact]
+    public async Task AcquireAsync_GlobalMutexSupportsRepeatedManagedClassicHandoffs()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"netaccel-owner-{Guid.NewGuid():N}");
+        var snapshotPath = Path.Combine(directory, "managed-connection-owner.json");
+        Directory.CreateDirectory(directory);
+
+        try
+        {
+            var ct = TestContext.Current.CancellationToken;
+            await using var coordinator = new ConnectionOwnershipCoordinator(
+                new FileConnectionOwnershipStore(snapshotPath),
+                mutexName: $"NetAccel.Tests.ConnectionOwnership.{Guid.NewGuid():N}");
+
+            for (var i = 0; i < 10; i++)
+            {
+                var managed = await coordinator.AcquireAsync(ConnectionOwner.Managed, ct);
+                Assert.True(managed.Acquired, managed.ConflictReason);
+                await managed.Lease!.DisposeAsync();
+
+                var classic = await coordinator.AcquireAsync(ConnectionOwner.Classic, ct);
+                Assert.True(classic.Acquired, classic.ConflictReason);
+                await classic.Lease!.DisposeAsync();
+            }
+
+            Assert.Equal(ConnectionOwner.None, coordinator.CurrentOwner);
+            Assert.False(File.Exists(snapshotPath));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
 }

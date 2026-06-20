@@ -128,9 +128,8 @@ public sealed class ConnectionOwnershipCoordinator : IAsyncDisposable
     private readonly Func<int, bool> _isProcessRunning;
     private readonly Func<DateTimeOffset> _now;
     private readonly bool _useGlobalMutex;
+    private readonly string _mutexName;
     private readonly SemaphoreSlim _gate = new(1, 1);
-    private readonly Mutex? _mutex;
-    private bool _mutexHeld;
     private ConnectionOwner _currentOwner = ConnectionOwner.None;
 
     public ConnectionOwnershipCoordinator(
@@ -143,8 +142,8 @@ public sealed class ConnectionOwnershipCoordinator : IAsyncDisposable
         _store = store ?? new FileConnectionOwnershipStore();
         _isProcessRunning = isProcessRunning ?? IsProcessRunning;
         _useGlobalMutex = useGlobalMutex;
+        _mutexName = mutexName;
         _now = now ?? (() => DateTimeOffset.UtcNow);
-        _mutex = useGlobalMutex ? new Mutex(false, mutexName) : null;
     }
 
     public ConnectionOwner CurrentOwner => _currentOwner;
@@ -172,29 +171,40 @@ public sealed class ConnectionOwnershipCoordinator : IAsyncDisposable
                 return Failed(owner, $"owner_already_held:{_currentOwner}");
             }
 
-            if (!TryAcquireMutex())
+            var transaction = await RunOwnershipTransactionAsync(async () =>
+            {
+                var snapshot = await _store.ReadAsync(ct);
+                if (snapshot is { Owner: not ConnectionOwner.None } && IsSnapshotLive(snapshot))
+                {
+                    return Failed(owner, $"owner_snapshot_live:{snapshot.Owner}");
+                }
+
+                var now = _now();
+                var newSnapshot = new ConnectionOwnershipSnapshot
+                {
+                    Owner = owner,
+                    ProcessId = Environment.ProcessId,
+                    MachineName = Environment.MachineName,
+                    AcquiredAt = now,
+                    UpdatedAt = now,
+                };
+
+                await _store.WriteAsync(newSnapshot, ct);
+                return new ConnectionOwnershipAcquireResult
+                {
+                    Acquired = true,
+                    Owner = owner,
+                };
+            }, ct);
+            if (!transaction.LockAcquired)
             {
                 return Failed(owner, "owner_mutex_busy");
             }
-
-            var snapshot = await _store.ReadAsync(ct);
-            if (snapshot is { Owner: not ConnectionOwner.None } && IsSnapshotLive(snapshot))
+            if (!transaction.Result.Acquired)
             {
-                ReleaseMutexIfHeld();
-                return Failed(owner, $"owner_snapshot_live:{snapshot.Owner}");
+                return transaction.Result;
             }
 
-            var now = _now();
-            var newSnapshot = new ConnectionOwnershipSnapshot
-            {
-                Owner = owner,
-                ProcessId = Environment.ProcessId,
-                MachineName = Environment.MachineName,
-                AcquiredAt = now,
-                UpdatedAt = now,
-            };
-
-            await _store.WriteAsync(newSnapshot, ct);
             _currentOwner = owner;
 
             return new ConnectionOwnershipAcquireResult
@@ -203,15 +213,6 @@ public sealed class ConnectionOwnershipCoordinator : IAsyncDisposable
                 Owner = owner,
                 Lease = new ConnectionOwnershipLease(this, owner),
             };
-        }
-        catch
-        {
-            if (_currentOwner == ConnectionOwner.None)
-            {
-                ReleaseMutexIfHeld();
-            }
-
-            throw;
         }
         finally
         {
@@ -234,9 +235,17 @@ public sealed class ConnectionOwnershipCoordinator : IAsyncDisposable
                 return false;
             }
 
-            await _store.ClearAsync(ct);
+            var transaction = await RunOwnershipTransactionAsync(async () =>
+            {
+                await _store.ClearAsync(ct);
+                return true;
+            }, ct);
+            if (!transaction.LockAcquired || !transaction.Result)
+            {
+                return false;
+            }
+
             _currentOwner = ConnectionOwner.None;
-            ReleaseMutexIfHeld();
             return true;
         }
         finally
@@ -252,50 +261,50 @@ public sealed class ConnectionOwnershipCoordinator : IAsyncDisposable
             await ReleaseAsync(_currentOwner);
         }
         _gate.Dispose();
-        _mutex?.Dispose();
     }
 
     private static ConnectionOwnershipAcquireResult Failed(ConnectionOwner owner, string reason)
         => new() { Acquired = false, Owner = owner, ConflictReason = reason };
 
-    private bool TryAcquireMutex()
+    // Windows mutexes are thread-affine. Keep acquisition, snapshot I/O and
+    // release on one worker; the live-process snapshot carries the long lease.
+    private async Task<(bool LockAcquired, T Result)> RunOwnershipTransactionAsync<T>(
+        Func<Task<T>> operation,
+        CancellationToken ct)
     {
-        if (!_useGlobalMutex || _mutex == null)
+        if (!_useGlobalMutex)
         {
-            return true;
+            return (true, await operation());
         }
 
-        try
+        return await Task.Run(() =>
         {
-            _mutexHeld = _mutex.WaitOne(0);
-            return _mutexHeld;
-        }
-        catch (AbandonedMutexException)
-        {
-            _mutexHeld = true;
-            return true;
-        }
-    }
+            ct.ThrowIfCancellationRequested();
+            using var mutex = new Mutex(false, _mutexName);
+            bool acquired;
+            try
+            {
+                acquired = mutex.WaitOne(TimeSpan.FromSeconds(5));
+            }
+            catch (AbandonedMutexException)
+            {
+                acquired = true;
+            }
 
-    private void ReleaseMutexIfHeld()
-    {
-        if (!_mutexHeld || _mutex == null)
-        {
-            return;
-        }
+            if (!acquired)
+            {
+                return (false, default(T)!);
+            }
 
-        try
-        {
-            _mutex.ReleaseMutex();
-        }
-        catch
-        {
-            // Best-effort cleanup. The ownership snapshot is still authoritative for recovery.
-        }
-        finally
-        {
-            _mutexHeld = false;
-        }
+            try
+            {
+                return (true, operation().GetAwaiter().GetResult());
+            }
+            finally
+            {
+                mutex.ReleaseMutex();
+            }
+        }, ct);
     }
 
     private bool IsSnapshotLive(ConnectionOwnershipSnapshot snapshot)
