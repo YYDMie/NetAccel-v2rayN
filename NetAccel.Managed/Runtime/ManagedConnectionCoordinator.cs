@@ -9,6 +9,7 @@ using ServiceLib.Enums;
 using ServiceLib.Handler.SysProxy;
 using ServiceLib.Manager;
 using ServiceLib.Models.Configs;
+using System.Runtime.Versioning;
 
 namespace NetAccel.Managed.Runtime;
 
@@ -142,6 +143,13 @@ public sealed class ServiceLibManagedCoreRunner : IManagedCoreRunner, IManagedDi
 
         try
         {
+            if (mode == ManagedConnectionMode.SystemProxy && OperatingSystem.IsWindows())
+            {
+                _windowsProxySnapshot = ProxySettingWindows.CaptureSnapshot();
+                _managedSystemProxyApplied = true;
+                await _updateFunc(false, $"Managed proxy snapshot captured (enabled={SnapshotProxyEnabled(_windowsProxySnapshot)}).");
+            }
+
             await CoreManager.Instance.Init(context.AppConfig, _updateFunc);
             await CoreManager.Instance.LoadCore(context, null);
             if (!CoreManager.Instance.IsCoreRunning)
@@ -151,11 +159,6 @@ public sealed class ServiceLibManagedCoreRunner : IManagedCoreRunner, IManagedDi
 
             if (mode == ManagedConnectionMode.SystemProxy)
             {
-                if (OperatingSystem.IsWindows())
-                {
-                    _windowsProxySnapshot = ProxySettingWindows.CaptureSnapshot();
-                }
-
                 var proxySet = await SysProxyHandler.UpdateSysProxy(context.AppConfig, false);
                 if (!proxySet)
                 {
@@ -179,20 +182,9 @@ public sealed class ServiceLibManagedCoreRunner : IManagedCoreRunner, IManagedDi
     public async Task StopAsync(CancellationToken ct = default)
     {
         var activeConfig = _activeConfig;
+        var proxySnapshot = _windowsProxySnapshot;
+        var restoreSystemProxy = _managedSystemProxyApplied;
         Exception? restoreError = null;
-
-        if (activeConfig != null && _managedSystemProxyApplied)
-        {
-            try
-            {
-                await RestoreSystemProxySnapshotAsync(activeConfig);
-                _managedSystemProxyApplied = false;
-            }
-            catch (Exception ex)
-            {
-                restoreError = ex;
-            }
-        }
 
         await CoreManager.Instance.CoreStop();
 
@@ -203,6 +195,19 @@ public sealed class ServiceLibManagedCoreRunner : IManagedCoreRunner, IManagedDi
         }
 
         ResetManagedRuntime();
+
+        if (activeConfig != null && restoreSystemProxy)
+        {
+            try
+            {
+                await RestoreSystemProxySnapshotAsync(activeConfig, proxySnapshot);
+            }
+            catch (Exception ex)
+            {
+                restoreError = ex;
+            }
+        }
+
         if (restoreError != null)
         {
             throw new InvalidOperationException("Managed system proxy snapshot could not be restored.", restoreError);
@@ -232,7 +237,7 @@ public sealed class ServiceLibManagedCoreRunner : IManagedCoreRunner, IManagedDi
             return;
         }
 
-        await RestoreSystemProxySnapshotAsync(_activeConfig);
+        await RestoreSystemProxySnapshotAsync(_activeConfig, _windowsProxySnapshot);
         _managedSystemProxyApplied = false;
         ResetManagedRuntimeIfClean();
     }
@@ -273,15 +278,29 @@ public sealed class ServiceLibManagedCoreRunner : IManagedCoreRunner, IManagedDi
         _runtimeConfigScope = null;
     }
 
-    private async Task RestoreSystemProxySnapshotAsync(Config activeConfig)
+    private async Task RestoreSystemProxySnapshotAsync(
+        Config activeConfig,
+        ProxySettingWindows.WindowsProxySnapshot? proxySnapshot)
     {
-        if (OperatingSystem.IsWindows() && _windowsProxySnapshot != null)
+        if (OperatingSystem.IsWindows() && proxySnapshot != null)
         {
-            ProxySettingWindows.RestoreSnapshot(_windowsProxySnapshot);
+            ProxySettingWindows.RestoreSnapshot(proxySnapshot);
+            var restored = ProxySettingWindows.CaptureSnapshot();
+            await _updateFunc(false, $"Managed proxy snapshot restored (enabled={SnapshotProxyEnabled(restored)}).");
             return;
         }
 
         await SysProxyHandler.UpdateSysProxy(activeConfig, true);
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static int SnapshotProxyEnabled(ProxySettingWindows.WindowsProxySnapshot snapshot)
+    {
+        if (!snapshot.Values.TryGetValue("ProxyEnable", out var value) || value == null)
+        {
+            return 0;
+        }
+        return Convert.ToInt32(value);
     }
 }
 

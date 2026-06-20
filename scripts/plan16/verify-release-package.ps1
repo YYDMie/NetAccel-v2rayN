@@ -16,7 +16,10 @@ if ($ReleaseKeyId -notmatch '^[A-Za-z0-9._-]{1,64}$') {
 $requiredFiles = @(
     (Join-Path $publishRoot "NetAccel.exe"),
     (Join-Path $publishRoot "updater\NetAccel.Updater.exe"),
-    (Join-Path $publishRoot "release-trust\$ReleaseKeyId.pem")
+    (Join-Path $publishRoot "release-trust\$ReleaseKeyId.pem"),
+    (Join-Path $publishRoot "managed-trust\envelope.pem"),
+    (Join-Path $publishRoot "bin\xray\xray.exe"),
+    (Join-Path $publishRoot "bin\sing_box\sing-box.exe")
 )
 
 foreach ($requiredFile in $requiredFiles) {

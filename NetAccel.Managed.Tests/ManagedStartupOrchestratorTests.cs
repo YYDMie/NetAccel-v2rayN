@@ -158,7 +158,7 @@ public class ManagedStartupOrchestratorTests
             }
             if (path == "/api/v1/client/instances/register")
             {
-                var data = new ClientInstanceRegisterResponse { InstanceId = "i1", InstanceCredential = "ic1" };
+                var data = RegistrationResponse();
                 var envelope = new ManagedApiResponse<ClientInstanceRegisterResponse> { Code = 200, Message = "ok", ErrorCode = "", Data = data };
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
@@ -290,7 +290,7 @@ public class ManagedStartupOrchestratorTests
             }
             if (path == "/api/v1/client/instances/register")
             {
-                var data = new ClientInstanceRegisterResponse { InstanceId = "i1", InstanceCredential = "ic1" };
+                var data = RegistrationResponse();
                 var envelope = new ManagedApiResponse<ClientInstanceRegisterResponse> { Code = 200, Message = "ok", ErrorCode = "", Data = data };
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
@@ -376,7 +376,7 @@ public class ManagedStartupOrchestratorTests
             }
             if (path == "/api/v1/client/instances/register")
             {
-                var data = new ClientInstanceRegisterResponse { InstanceId = "i1", InstanceCredential = "ic1" };
+                var data = RegistrationResponse();
                 var envelope = new ManagedApiResponse<ClientInstanceRegisterResponse> { Code = 200, Message = "ok", ErrorCode = "", Data = data };
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
@@ -488,7 +488,7 @@ public class ManagedStartupOrchestratorTests
             }
             if (path == "/api/v1/client/instances/register")
             {
-                var data = new ClientInstanceRegisterResponse { InstanceId = "i1", InstanceCredential = "ic1" };
+                var data = RegistrationResponse();
                 var envelope = new ManagedApiResponse<ClientInstanceRegisterResponse> { Code = 200, Message = "ok", ErrorCode = "", Data = data };
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
@@ -577,7 +577,7 @@ public class ManagedStartupOrchestratorTests
             }
             if (path == "/api/v1/client/instances/register")
             {
-                var data = new ClientInstanceRegisterResponse { InstanceId = "i1", InstanceCredential = "ic1" };
+                var data = RegistrationResponse();
                 var envelope = new ManagedApiResponse<ClientInstanceRegisterResponse> { Code = 200, Message = "ok", ErrorCode = "", Data = data };
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
@@ -687,7 +687,7 @@ public class ManagedStartupOrchestratorTests
             }
             if (path == "/api/v1/client/instances/register")
             {
-                var data = new ClientInstanceRegisterResponse { InstanceId = "i1", InstanceCredential = "ic1" };
+                var data = RegistrationResponse();
                 var envelope = new ManagedApiResponse<ClientInstanceRegisterResponse> { Code = 200, Message = "ok", ErrorCode = "", Data = data };
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
@@ -810,7 +810,7 @@ public class ManagedStartupOrchestratorTests
             }
             if (path == "/api/v1/client/instances/register")
             {
-                var data = new ClientInstanceRegisterResponse { InstanceId = "i1", InstanceCredential = "ic1" };
+                var data = RegistrationResponse();
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new StringContent(
@@ -981,7 +981,7 @@ public class ManagedStartupOrchestratorTests
             }
             if (path == "/api/v1/client/instances/register")
             {
-                var data = new ClientInstanceRegisterResponse { InstanceId = "i1", InstanceCredential = "ic1" };
+                var data = RegistrationResponse();
                 var envelope = new ManagedApiResponse<ClientInstanceRegisterResponse> { Code = 200, Message = "ok", ErrorCode = "", Data = data };
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
@@ -1092,7 +1092,7 @@ public class ManagedStartupOrchestratorTests
             }
             if (path == "/api/v1/client/instances/register")
             {
-                var data = new ClientInstanceRegisterResponse { InstanceId = "i1", InstanceCredential = "ic1" };
+                var data = RegistrationResponse();
                 var envelope = new ManagedApiResponse<ClientInstanceRegisterResponse> { Code = 200, Message = "ok", ErrorCode = "", Data = data };
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
@@ -1216,7 +1216,7 @@ public class ManagedStartupOrchestratorTests
             }
             if (path == "/api/v1/client/instances/register")
             {
-                var data = new ClientInstanceRegisterResponse { InstanceId = "i1", InstanceCredential = "ic1" };
+                var data = RegistrationResponse();
                 var envelope = new ManagedApiResponse<ClientInstanceRegisterResponse> { Code = 200, Message = "ok", ErrorCode = "", Data = data };
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
@@ -1305,6 +1305,17 @@ public class ManagedStartupOrchestratorTests
         http.Dispose();
         Directory.Delete(cacheDir, true);
     }
+
+    private static ClientInstanceRegisterResponse RegistrationResponse() => new()
+    {
+        Instance = new RegisteredClientInstance { Id = "i1" },
+        InstanceCredential = new InstanceCredential
+        {
+            Credential = "ic1",
+            Scope = ["instance:heartbeat", "session:report"],
+            ExpiresAt = 1781308800,
+        },
+    };
 
     private sealed class FakeHandler : HttpMessageHandler
     {

@@ -24,6 +24,7 @@ jobs:
       NETACCEL_RELEASE_SIGNING_KEY_PEM: ${{ secrets.NETACCEL_RELEASE_SIGNING_KEY_PEM }}
       NETACCEL_RELEASE_SIGNING_KEY_ID: ${{ vars.NETACCEL_RELEASE_SIGNING_KEY_ID }}
       NETACCEL_RELEASE_PUBLIC_KEY_PEM: ${{ vars.NETACCEL_RELEASE_PUBLIC_KEY_PEM }}
+      NETACCEL_MANAGED_ENVELOPE_PUBLIC_KEY_PEM: ${{ vars.NETACCEL_MANAGED_ENVELOPE_PUBLIC_KEY_PEM }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -34,8 +35,9 @@ jobs:
         run: |
           if ([string]::IsNullOrWhiteSpace($env:NETACCEL_RELEASE_SIGNING_KEY_PEM) -or
               [string]::IsNullOrWhiteSpace($env:NETACCEL_RELEASE_SIGNING_KEY_ID) -or
-              [string]::IsNullOrWhiteSpace($env:NETACCEL_RELEASE_PUBLIC_KEY_PEM)) {
-            throw 'Release signing key, key id, and public key are required.'
+              [string]::IsNullOrWhiteSpace($env:NETACCEL_RELEASE_PUBLIC_KEY_PEM) -or
+              [string]::IsNullOrWhiteSpace($env:NETACCEL_MANAGED_ENVELOPE_PUBLIC_KEY_PEM)) {
+            throw 'Release signing key, release public key, key id, and managed envelope public key are required.'
           }
       - name: Restore
         run: dotnet restore v2rayN/v2rayN/v2rayN.csproj
@@ -46,9 +48,13 @@ jobs:
         run: |
           dotnet publish v2rayN/v2rayN/v2rayN.csproj -c Release -r win-x64 --self-contained true -o artifacts/wpf
           dotnet publish NetAccel.Updater/NetAccel.Updater.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o artifacts/wpf/updater
+          ./scripts/plan16/install-pinned-cores.ps1 -PublishDirectory artifacts/wpf
           $trust = Join-Path 'artifacts/wpf/release-trust' ($env:NETACCEL_RELEASE_SIGNING_KEY_ID + '.pem')
           New-Item -ItemType Directory -Force (Split-Path $trust) | Out-Null
           [IO.File]::WriteAllText((Resolve-Path (Split-Path $trust)).Path + '\' + (Split-Path $trust -Leaf), $env:NETACCEL_RELEASE_PUBLIC_KEY_PEM, [Text.UTF8Encoding]::new($false))
+          $managedTrust = 'artifacts/wpf/managed-trust/envelope.pem'
+          New-Item -ItemType Directory -Force (Split-Path $managedTrust) | Out-Null
+          [IO.File]::WriteAllText((Resolve-Path (Split-Path $managedTrust)).Path + '\envelope.pem', $env:NETACCEL_MANAGED_ENVELOPE_PUBLIC_KEY_PEM, [Text.UTF8Encoding]::new($false))
           ./scripts/plan16/verify-release-package.ps1 `
             -PublishDirectory artifacts/wpf `
             -ReleaseKeyId $env:NETACCEL_RELEASE_SIGNING_KEY_ID

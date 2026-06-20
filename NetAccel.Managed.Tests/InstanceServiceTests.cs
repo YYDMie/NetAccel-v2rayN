@@ -19,7 +19,7 @@ public class InstanceServiceTests
     {
         var h = handler ?? ((req, ct) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = new StringContent("{\"code\":200,\"message\":\"ok\",\"error_code\":\"\",\"data\":{\"instance_id\":\"i1\",\"instance_credential\":\"ic1\"}}", Encoding.UTF8, "application/json"),
+            Content = new StringContent("{\"code\":200,\"message\":\"ok\",\"error_code\":\"\",\"data\":{\"instance\":{\"id\":\"i1\"},\"instance_credential\":{\"credential\":\"ic1\",\"scope\":[\"instance:heartbeat\"],\"expires_at\":1781308800}}}", Encoding.UTF8, "application/json"),
         }));
         var http = new HttpClient(new FakeHandler(h));
         var api = new ManagedApiClient("https://api.example.com", http);
@@ -83,8 +83,14 @@ public class InstanceServiceTests
     [Fact]
     public async Task Heartbeat_Success_ReturnsControl()
     {
-        var (svc, vault, http) = CreateService((req, ct) =>
+        var (svc, vault, http) = CreateService(async (req, ct) =>
         {
+            Assert.Equal("/api/v1/client/runtime/instances/i1/heartbeat", req.RequestUri?.AbsolutePath);
+            using var body = JsonDocument.Parse(await req.Content!.ReadAsStringAsync(ct));
+            Assert.Equal("1.13.12", body.RootElement.GetProperty("engine_version").GetString());
+            Assert.False(body.RootElement.TryGetProperty("core_versions", out _));
+            Assert.False(body.RootElement.TryGetProperty("effective_profile_id", out _));
+            Assert.False(body.RootElement.TryGetProperty("session_active", out _));
             var data = new HeartbeatResponse
             {
                 InstanceStatus = "online",
@@ -103,15 +109,15 @@ public class InstanceServiceTests
                 },
             };
             var envelope = new ManagedApiResponse<HeartbeatResponse> { Code = 200, Message = "ok", ErrorCode = "", Data = data };
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(JsonSerializer.Serialize(envelope), Encoding.UTF8, "application/json"),
-            });
+            };
         });
         await vault.StoreAsync(CredentialVaultEntry.InstanceCredential, "ic");
         await vault.StoreAsync(CredentialVaultEntry.InstanceMetadata, "i1");
 
-        var result = await svc.HeartbeatAsync("1.0", new(), new(), null, false);
+        var result = await svc.HeartbeatAsync("1.0", new() { ["sing-box"] = "1.13.12" }, new(), null, false);
         Assert.Equal(HeartbeatResultKind.Success, result.Kind);
         Assert.NotNull(result.Control);
         Assert.Equal(42, result.Control.DesiredRevision);
@@ -157,7 +163,10 @@ public class InstanceServiceTests
     {
         var (svc, vault, http) = CreateService((req, ct) =>
         {
-            var data = new CredentialRotateResponse { InstanceCredential = "ic2", Scope = ["instance:heartbeat"], ExpiresAt = "2026-06-13T00:00:00Z" };
+            var data = new CredentialRotateResponse
+            {
+                InstanceCredential = new InstanceCredential { Credential = "ic2", Scope = ["instance:heartbeat"], ExpiresAt = 1781308800 },
+            };
             var envelope = new ManagedApiResponse<CredentialRotateResponse> { Code = 200, Message = "ok", ErrorCode = "", Data = data };
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
@@ -197,7 +206,11 @@ public class InstanceServiceTests
                     Content = new StringContent(JsonSerializer.Serialize(envelope), Encoding.UTF8, "application/json"),
                 });
             }
-            var data = new ClientInstanceRegisterResponse { InstanceId = "i1", InstanceCredential = "ic1" };
+            var data = new ClientInstanceRegisterResponse
+            {
+                Instance = new RegisteredClientInstance { Id = "i1" },
+                InstanceCredential = new InstanceCredential { Credential = "ic1", Scope = ["instance:heartbeat"], ExpiresAt = 1781308800 },
+            };
             var envelope2 = new ManagedApiResponse<ClientInstanceRegisterResponse> { Code = 200, Message = "ok", ErrorCode = "", Data = data };
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {

@@ -49,9 +49,6 @@ public sealed class ClientInstanceRegisterRequest
     [JsonPropertyName("display_name")]
     public string DisplayName { get; set; } = string.Empty;
 
-    [JsonPropertyName("client_product")]
-    public string ClientProduct { get; set; } = string.Empty;
-
     [JsonPropertyName("platform")]
     public string Platform { get; set; } = string.Empty;
 
@@ -64,8 +61,8 @@ public sealed class ClientInstanceRegisterRequest
     [JsonPropertyName("client_version")]
     public string ClientVersion { get; set; } = string.Empty;
 
-    [JsonPropertyName("core_versions")]
-    public Dictionary<string, string> CoreVersions { get; set; } = new();
+    [JsonPropertyName("engine_version")]
+    public string EngineVersion { get; set; } = string.Empty;
 
     [JsonPropertyName("capabilities")]
     public ClientCapabilities Capabilities { get; set; } = new();
@@ -73,23 +70,21 @@ public sealed class ClientInstanceRegisterRequest
     /// <summary>
     /// Old instance credential proof when recovering an existing binding.
     /// </summary>
-    [JsonPropertyName("old_instance_credential")]
-    public string? OldInstanceCredential { get; set; }
 }
 
 public sealed class ClientInstanceRegisterResponse
 {
-    [JsonPropertyName("instance_id")]
-    public string InstanceId { get; set; } = string.Empty;
+    [JsonPropertyName("instance")]
+    public RegisteredClientInstance Instance { get; set; } = new();
 
     [JsonPropertyName("instance_credential")]
-    public string InstanceCredential { get; set; } = string.Empty;
+    public InstanceCredential InstanceCredential { get; set; } = new();
+}
 
-    [JsonPropertyName("scope")]
-    public List<string> Scope { get; set; } = [];
-
-    [JsonPropertyName("expires_at")]
-    public string? ExpiresAt { get; set; }
+public sealed class RegisteredClientInstance
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = string.Empty;
 }
 
 public sealed class HeartbeatRequest
@@ -97,17 +92,12 @@ public sealed class HeartbeatRequest
     [JsonPropertyName("client_version")]
     public string ClientVersion { get; set; } = string.Empty;
 
-    [JsonPropertyName("core_versions")]
-    public Dictionary<string, string> CoreVersions { get; set; } = new();
+    [JsonPropertyName("engine_version")]
+    public string EngineVersion { get; set; } = string.Empty;
 
     [JsonPropertyName("capabilities")]
     public ClientCapabilities Capabilities { get; set; } = new();
 
-    [JsonPropertyName("effective_profile_id")]
-    public string? EffectiveProfileId { get; set; }
-
-    [JsonPropertyName("session_active")]
-    public bool SessionActive { get; set; }
 }
 
 public sealed class HeartbeatControl
@@ -161,11 +151,5 @@ public sealed class HeartbeatResponse
 public sealed class CredentialRotateResponse
 {
     [JsonPropertyName("instance_credential")]
-    public string InstanceCredential { get; set; } = string.Empty;
-
-    [JsonPropertyName("scope")]
-    public List<string> Scope { get; set; } = [];
-
-    [JsonPropertyName("expires_at")]
-    public string? ExpiresAt { get; set; }
+    public InstanceCredential InstanceCredential { get; set; } = new();
 }

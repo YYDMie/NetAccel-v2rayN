@@ -103,14 +103,12 @@ public sealed class InstanceService : IInstanceService
         {
             InstallationKey = installationKey,
             DisplayName = $"{Environment.MachineName} ({Environment.UserName})",
-            ClientProduct = "netaccel-v2rayn-wpf",
             Platform = platform,
             PlatformVersion = platformVersion,
             Arch = arch,
             ClientVersion = clientVersion,
-            CoreVersions = coreVersions,
+            EngineVersion = GetEngineVersion(coreVersions),
             Capabilities = capabilities,
-            OldInstanceCredential = oldInstanceCredential,
         };
 
         var opResult = await _auth.ExecuteWithRefreshAsync(
@@ -120,8 +118,8 @@ public sealed class InstanceService : IInstanceService
         if (opResult.IsSuccess)
         {
             var result = opResult.Value!;
-            await _vault.StoreAsync(CredentialVaultEntry.InstanceCredential, result.InstanceCredential);
-            await _vault.StoreAsync(CredentialVaultEntry.InstanceMetadata, result.InstanceId);
+            await _vault.StoreAsync(CredentialVaultEntry.InstanceCredential, result.InstanceCredential.Credential);
+            await _vault.StoreAsync(CredentialVaultEntry.InstanceMetadata, result.Instance.Id);
             return new InstanceResult { Kind = InstanceResultKind.Success };
         }
 
@@ -173,13 +171,11 @@ public sealed class InstanceService : IInstanceService
             var request = new HeartbeatRequest
             {
                 ClientVersion = clientVersion,
-                CoreVersions = coreVersions,
+                EngineVersion = GetEngineVersion(coreVersions),
                 Capabilities = capabilities,
-                EffectiveProfileId = effectiveProfileId,
-                SessionActive = sessionActive,
             };
 
-            var result = await _api.PostAsync<HeartbeatResponse>($"/client/instances/{instanceId}/heartbeat", request, instanceCredential: instanceCredential, ct: ct);
+            var result = await _api.PostAsync<HeartbeatResponse>($"/client/runtime/instances/{instanceId}/heartbeat", request, instanceCredential: instanceCredential, ct: ct);
 
             var control = result.Control;
             if (control.InstanceRevoked)
@@ -230,6 +226,19 @@ public sealed class InstanceService : IInstanceService
         }
     }
 
+    private static string GetEngineVersion(IReadOnlyDictionary<string, string> coreVersions)
+    {
+        if (coreVersions.TryGetValue("sing-box", out var singBoxVersion))
+        {
+            return singBoxVersion;
+        }
+        if (coreVersions.TryGetValue("xray", out var xrayVersion))
+        {
+            return xrayVersion;
+        }
+        return string.Empty;
+    }
+
     public async Task<InstanceResult> RotateCredentialAsync(CancellationToken ct = default)
     {
         var accessToken = await _auth.GetAccessTokenAsync();
@@ -249,7 +258,7 @@ public sealed class InstanceService : IInstanceService
                 instanceCredential: instanceCredential,
                 ct: ct);
 
-            await _vault.StoreAsync(CredentialVaultEntry.InstanceCredential, result.InstanceCredential);
+            await _vault.StoreAsync(CredentialVaultEntry.InstanceCredential, result.InstanceCredential.Credential);
             return new InstanceResult { Kind = InstanceResultKind.Success };
         }
         catch (ManagedApiException ex)

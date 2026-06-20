@@ -71,12 +71,18 @@ public sealed class ManagedClientRuntime : IDisposable
 
     public static ManagedClientRuntime Create()
     {
+        PackagedCoreBootstrapper.Install(AppContext.BaseDirectory, Utils.StartupPath());
         var http = new HttpClient();
         var api = new ManagedApiClient(GetApiBaseUrl(), http);
         var vault = new WindowsCredentialVault();
-        var auth = new AuthService(api, vault);
+        static Task LogManagedAsync(string message)
+        {
+            Logging.SaveLog($"[Managed] {message}");
+            return Task.CompletedTask;
+        }
+        var auth = new AuthService(api, vault, LogManagedAsync);
         var installation = new InstallationIdentityService(vault);
-        var instance = new InstanceService(api, vault, auth);
+        var instance = new InstanceService(api, vault, auth, LogManagedAsync);
         var selection = new ManagedSelectionService(api, vault, auth);
         var config = new ManagedConfigService(api, vault, auth);
         var deviceKeys = new DeviceKeyManager(vault);
@@ -97,7 +103,8 @@ public sealed class ManagedClientRuntime : IDisposable
             vault,
             Utils.GetVersionInfo(),
             new Dictionary<string, string>(),
-            CreateCapabilities());
+            CreateCapabilities(),
+            LogManagedAsync);
         var ownership = new ConnectionOwnershipCoordinator();
         var sessionReporter = new ManagedSessionReporter(
             new ManagedSessionApiTransport(api, instance),
@@ -182,7 +189,7 @@ public sealed class ManagedClientRuntime : IDisposable
             {
                 var masterOrigin = new Uri(GetApiBaseUrl());
                 var trust = new DirectoryManagedReleaseTrustStore(
-                    Path.Combine(Utils.StartupPath(), "release-trust"));
+                    Path.Combine(AppContext.BaseDirectory, "release-trust"));
                 var updateClient = new ManagedUpdateClient(http, new ManagedReleaseVerifier(trust), masterOrigin);
                 var stage = await updateClient.StageLatestAsync(
                     "windows",
@@ -290,26 +297,10 @@ public sealed class ManagedClientRuntime : IDisposable
 
     private static string? ReadServerSigningPublicKey()
     {
-        var inline = Environment.GetEnvironmentVariable("NETACCEL_SERVER_SIGNING_PUBLIC_KEY");
-        if (!string.IsNullOrWhiteSpace(inline))
-        {
-            return inline.Replace("\\n", Environment.NewLine, StringComparison.Ordinal);
-        }
-
-        var path = Environment.GetEnvironmentVariable("NETACCEL_SERVER_SIGNING_PUBLIC_KEY_PATH");
-        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
-        {
-            return null;
-        }
-
-        try
-        {
-            return File.ReadAllText(path);
-        }
-        catch
-        {
-            return null;
-        }
+        return ManagedServerTrustLoader.Load(
+            AppContext.BaseDirectory,
+            Environment.GetEnvironmentVariable("NETACCEL_SERVER_SIGNING_PUBLIC_KEY"),
+            Environment.GetEnvironmentVariable("NETACCEL_SERVER_SIGNING_PUBLIC_KEY_PATH"));
     }
 
     private static ClientCapabilities CreateCapabilities()

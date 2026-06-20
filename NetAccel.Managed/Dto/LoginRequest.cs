@@ -23,7 +23,10 @@ public sealed class LoginResponse
     public int AccountId { get; set; }
 
     [JsonPropertyName("expires_at")]
-    public string? ExpiresAt { get; set; }
+    public long? ExpiresAt { get; set; }
+
+    [JsonPropertyName("refresh_expires_at")]
+    public long? RefreshExpiresAt { get; set; }
 }
 
 public sealed class RefreshRequest
@@ -44,5 +47,8 @@ public sealed class RefreshResponse
     public int AccountId { get; set; }
 
     [JsonPropertyName("expires_at")]
-    public string? ExpiresAt { get; set; }
+    public long? ExpiresAt { get; set; }
+
+    [JsonPropertyName("refresh_expires_at")]
+    public long? RefreshExpiresAt { get; set; }
 }

@@ -40,6 +40,42 @@ public class ManagedApiClientTests
     }
 
     [Fact]
+    public async Task PostAsync_LoginResponse_AcceptsProductionUnixExpiry()
+    {
+        const string json = """
+            {"code":0,"message":"","data":{"access_token":"at_123","refresh_token":"rt_456","account_id":1,"expires_at":1781934459,"refresh_expires_at":1784522859}}
+            """;
+        var client = CreateFakeClient((req, ct) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json"),
+        }));
+
+        using var api = new ManagedApiClient("https://api.example.com", client);
+        var result = await api.PostAsync<LoginResponse>("/client/login", new LoginRequest(), ct: default);
+
+        Assert.Equal("1781934459", result.ExpiresAt?.ToString());
+    }
+
+    [Fact]
+    public async Task PostAsync_InstanceRegistration_AcceptsProductionUnixExpiry()
+    {
+        const string json = """
+            {"code":0,"message":"","data":{"instance":{"id":"instance-1"},"instance_credential":{"credential":"ic_123","scope":["instance:heartbeat"],"expires_at":1784522859}}}
+            """;
+        var client = CreateFakeClient((req, ct) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json"),
+        }));
+
+        using var api = new ManagedApiClient("https://api.example.com", client);
+        var result = await api.PostAsync<ClientInstanceRegisterResponse>("/client/instances/register", new { }, ct: default);
+
+        Assert.Equal("instance-1", result.Instance.Id);
+        Assert.Equal("ic_123", result.InstanceCredential.Credential);
+        Assert.Equal(1784522859, result.InstanceCredential.ExpiresAt);
+    }
+
+    [Fact]
     public async Task PostAsync_ShouldThrowManagedApiException_WithErrorCode()
     {
         var envelope = new ManagedApiResponse { Code = 401, Message = "unauthorized", ErrorCode = ManagedErrorCode.InvalidCredentials, Data = null };

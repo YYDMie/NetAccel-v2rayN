@@ -29,6 +29,32 @@ public static class ProxySettingWindows
 
     public static void RestoreSnapshot(WindowsProxySnapshot snapshot)
     {
+        var proxyEnabled = snapshot.Values.TryGetValue("ProxyEnable", out var enabledValue)
+            && enabledValue != null
+            && Convert.ToInt32(enabledValue) != 0;
+        var proxyServer = snapshot.Values.TryGetValue("ProxyServer", out var serverValue)
+            ? serverValue?.ToString()
+            : null;
+        var proxyOverride = snapshot.Values.TryGetValue("ProxyOverride", out var overrideValue)
+            ? overrideValue?.ToString()
+            : null;
+        var autoConfigUrl = snapshot.Values.TryGetValue("AutoConfigURL", out var autoConfigValue)
+            ? autoConfigValue?.ToString()
+            : null;
+
+        if (!string.IsNullOrWhiteSpace(autoConfigUrl))
+        {
+            _ = SetProxy(autoConfigUrl, proxyOverride, 4);
+        }
+        else if (proxyEnabled && !string.IsNullOrWhiteSpace(proxyServer))
+        {
+            _ = SetProxy(proxyServer, proxyOverride, 2);
+        }
+        else
+        {
+            _ = UnsetProxy();
+        }
+
         using var key = Registry.CurrentUser.CreateSubKey(_regPath);
         foreach (var name in SnapshotValueNames)
         {

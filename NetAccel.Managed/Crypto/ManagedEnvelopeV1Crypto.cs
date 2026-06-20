@@ -159,7 +159,7 @@ public static class ManagedEnvelopeV1Crypto
         deviceEcdh.ImportFromPem(devicePublicKeyPem);
 
         // Derive shared secret
-        var sharedSecret = ephemeralEcdh.DeriveKeyMaterial(deviceEcdh.PublicKey);
+        var sharedSecret = ephemeralEcdh.DeriveRawSecretAgreement(deviceEcdh.PublicKey);
 
         // Generate salt
         var salt = new byte[16];
@@ -228,7 +228,7 @@ public static class ManagedEnvelopeV1Crypto
         using var ephemeralEcdh = ECDiffieHellman.Create();
         ephemeralEcdh.ImportFromPem(envelope.EphemeralPublicKey);
 
-        var sharedSecret = deviceEcdh.DeriveKeyMaterial(ephemeralEcdh.PublicKey);
+        var sharedSecret = deviceEcdh.DeriveRawSecretAgreement(ephemeralEcdh.PublicKey);
 
         var salt = Convert.FromBase64String(envelope.Salt);
         var aesKey = HKDF.DeriveKey(HashAlgorithmName.SHA256, sharedSecret, 32, salt, Encoding.UTF8.GetBytes(HkdfInfo));
