@@ -14,6 +14,7 @@ plan.Validate();
 await WaitForParentAsync(plan.ParentProcessId, TimeSpan.FromMinutes(2));
 Directory.CreateDirectory(plan.BackupDirectory);
 var changed = new List<ChangedFile>();
+Process? updatedProcess = null;
 try
 {
     foreach (var source in Directory.EnumerateFiles(plan.SourceDirectory, "*", SearchOption.AllDirectories))
@@ -40,7 +41,7 @@ try
         File.Delete(plan.HealthMarkerPath);
     }
     var executable = SafeChild(plan.TargetDirectory, plan.ExecutableName);
-    using var process = Process.Start(new ProcessStartInfo
+    updatedProcess = Process.Start(new ProcessStartInfo
     {
         FileName = executable,
         Arguments = $"--netaccel-update-health-marker \"{plan.HealthMarkerPath}\"",
@@ -49,10 +50,11 @@ try
     }) ?? throw new InvalidOperationException("Updated client did not start.");
 
     var deadline = DateTimeOffset.UtcNow.AddSeconds(plan.HealthTimeoutSeconds);
-    while (DateTimeOffset.UtcNow < deadline && !process.HasExited)
+    while (DateTimeOffset.UtcNow < deadline && !updatedProcess.HasExited)
     {
         if (File.Exists(plan.HealthMarkerPath))
         {
+            updatedProcess.Dispose();
             return 0;
         }
         await Task.Delay(500);
@@ -61,6 +63,8 @@ try
 }
 catch
 {
+    await StopUpdatedProcessAsync(updatedProcess);
+    var rollbackSucceeded = true;
     foreach (var file in changed.AsEnumerable().Reverse())
     {
         var target = SafeChild(plan.TargetDirectory, file.RelativePath);
@@ -68,25 +72,35 @@ catch
         if (file.Existed && File.Exists(backup))
         {
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-            File.Copy(backup, target, overwrite: true);
+            rollbackSucceeded &= await CopyWithRetryAsync(backup, target);
         }
         else if (!file.Existed && File.Exists(target))
         {
-            File.Delete(target);
+            rollbackSucceeded &= await DeleteWithRetryAsync(target);
         }
     }
 
     var original = SafeChild(plan.TargetDirectory, plan.ExecutableName);
-    if (File.Exists(original))
+    if (rollbackSucceeded && File.Exists(original))
     {
-        Process.Start(new ProcessStartInfo
+        try
         {
-            FileName = original,
-            WorkingDirectory = plan.TargetDirectory,
-            UseShellExecute = false,
-        });
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = original,
+                WorkingDirectory = plan.TargetDirectory,
+                UseShellExecute = false,
+            });
+        }
+        catch
+        {
+        }
     }
     return 1;
+}
+finally
+{
+    updatedProcess?.Dispose();
 }
 
 static async Task WaitForParentAsync(int pid, TimeSpan timeout)
@@ -102,6 +116,73 @@ static async Task WaitForParentAsync(int pid, TimeSpan timeout)
     {
         throw new TimeoutException("Parent process did not exit.");
     }
+}
+
+static async Task StopUpdatedProcessAsync(Process? process)
+{
+    if (process == null)
+    {
+        return;
+    }
+
+    var deadline = DateTimeOffset.UtcNow.AddSeconds(10);
+    while (DateTimeOffset.UtcNow < deadline)
+    {
+        try
+        {
+            if (process.HasExited)
+            {
+                return;
+            }
+            process.Kill(entireProcessTree: true);
+        }
+        catch
+        {
+        }
+        await Task.Delay(100);
+    }
+}
+
+static async Task<bool> CopyWithRetryAsync(string source, string target)
+{
+    var deadline = DateTimeOffset.UtcNow.AddSeconds(10);
+    while (DateTimeOffset.UtcNow < deadline)
+    {
+        try
+        {
+            File.Copy(source, target, overwrite: true);
+            return true;
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+        await Task.Delay(100);
+    }
+    return false;
+}
+
+static async Task<bool> DeleteWithRetryAsync(string path)
+{
+    var deadline = DateTimeOffset.UtcNow.AddSeconds(10);
+    while (DateTimeOffset.UtcNow < deadline)
+    {
+        try
+        {
+            File.Delete(path);
+            return true;
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+        await Task.Delay(100);
+    }
+    return false;
 }
 
 static string SafeChild(string root, string relative)
